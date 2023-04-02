@@ -18,6 +18,7 @@
     "firebase-admin": "^11.5.0",
     "fs": "^0.0.1-security",
     "js-yaml": "^4.1.0",
+    "markdown-it": "^13.0.1",
     "openai": "^3.2.1",
     "puppeteer": "^19.8.2",
     "sqlite3": "^5.1.6"

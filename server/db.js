@@ -10,7 +10,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
   }
 });
 
-// Initialize database with a table to store YAML files
+// Initialize database with tables to store YAML files and webhook markdown files
 db.serialize(() => {
   db.run(
     `CREATE TABLE IF NOT EXISTS yaml_files (
@@ -18,6 +18,20 @@ db.serialize(() => {
       url TEXT UNIQUE,
       content TEXT
     )`
+  );
+
+  db.run(
+    `CREATE TABLE IF NOT EXISTS webhook_md (
+      section TEXT PRIMARY KEY,
+      content TEXT
+    )`,
+    (err) => {
+      if (err) {
+        console.error("Error creating webhook_md table:", err);
+      } else {
+        console.log("webhook_md table created or already exists.");
+      }
+    }
   );
 });
 

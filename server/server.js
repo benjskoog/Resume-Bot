@@ -7,8 +7,11 @@ const puppeteer = require("puppeteer");
 const yaml = require("js-yaml");
 const bodyParser = require("body-parser");
 const { db, getTableData } = require("./db");
-
 const { Configuration, OpenAIApi } = require("openai");
+const fs = require("fs");
+const path = require("path");
+const markdownIt = require("markdown-it");
+const md = markdownIt();
 
 const configuration = new Configuration({
     apiKey: process.env.OPENAI_API_KEY,
@@ -26,46 +29,78 @@ app.use(cors());
 
 app.use(express.json());
 
-app.get("/fetch-yaml-urls", async (req, res) => {
-    try {
+app.get("/fetch-and-download-yaml-files", async (req, res) => {
+  try {
+    const isYamlFilesTableEmpty = async () => {
+      return new Promise((resolve, reject) => {
+        db.get("SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name='yaml_files'", (err, row) => {
+          if (err) {
+            reject(err);
+          } else {
+            if (row.count === 0) {
+              resolve(true);
+            } else {
+              db.get("SELECT COUNT(*) as count FROM yaml_files", (err, row) => {
+                if (err) {
+                  reject(err);
+                } else {
+                  resolve(row.count === 0);
+                }
+              });
+            }
+          }
+        });
+      });
+    };
+
+    const yamlFilesIsEmpty = await isYamlFilesTableEmpty();
+
+    let yamlUrls = [];
+
+    if (yamlFilesIsEmpty) {
       const pageUrl = "https://developers.welcomesoftware.com/openapi.html?hash=5b202b8";
-  
+
       const browser = await puppeteer.launch();
       const page = await browser.newPage();
-  
-      const yamlUrls = [];
-  
+
       page.on("request", (request) => {
         if (request.url().includes(".yaml")) {
           yamlUrls.push(request.url());
         }
       });
-  
+
       await page.goto(pageUrl, { waitUntil: "networkidle0" });
       await browser.close();
-  
-      res.send(yamlUrls);
-      console.log(yamlUrls)
-    } catch (error) {
-      console.error("Error fetching YAML file URLs:", error);
-      res.status(500).send("Error fetching YAML file URLs");
-    }
-  });
+    } else {
+      // Fetch URLs from the database if the table is not empty
+      const fetchYamlUrlsFromDatabase = () => {
+        return new Promise((resolve, reject) => {
+          db.all("SELECT url FROM yaml_files", (err, rows) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(rows.map((row) => row.url));
+            }
+          });
+        });
+      };
 
-  app.post("/download-yaml-files", async (req, res) => {
-    const yamlUrls = req.body.yamlUrls;
+      yamlUrls = await fetchYamlUrlsFromDatabase();
+    }
+
     const yamlFiles = {};
-  
+    let webhookFiles = {};
+
     const downloadFile = async (url) => {
       try {
         const response = await axios.get(url);
         const content = response.data;
         return content;
       } catch (error) {
-        console.error(`Error fetching YAML file at ${url}:`, error);
+        console.error(`Error fetching file at ${url}:`, error);
       }
     };
-  
+
     const getYamlFileFromDatabase = (url) => {
       return new Promise((resolve, reject) => {
         db.get("SELECT content FROM yaml_files WHERE url=?", [url], (err, row) => {
@@ -77,7 +112,19 @@ app.get("/fetch-yaml-urls", async (req, res) => {
         });
       });
     };
-  
+
+    const getWebhookFileFromDatabase = (url) => {
+      return new Promise((resolve, reject) => {
+        db.get("SELECT content FROM webhook_md WHERE url=?", [url], (err, row) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(row ? row.content : null);
+          }
+        });
+      });
+    };
+
     const saveYamlFileToDatabase = (url, content) => {
       db.run("INSERT OR REPLACE INTO yaml_files (url, content) VALUES (?, ?)", [url, content], (err) => {
         if (err) {
@@ -85,25 +132,76 @@ app.get("/fetch-yaml-urls", async (req, res) => {
         }
       });
     };
-  
-    const processUrl = async (url) => {
+
+    const saveWebhookToDatabase = (section, content) => {
+      db.run(
+        `INSERT OR REPLACE INTO webhook_md (section, content) VALUES (?, ?)`,
+        [section, content],
+        (err) => {
+          if (err) {
+            console.error("Error saving Webhook Markdown to database:", err);
+          }
+        }
+      );
+    };
+
+    const processYamlUrl = async (url) => {
       let content = await getYamlFileFromDatabase(url);
-  
+
       if (!content) {
         content = await downloadFile(url);
         saveYamlFileToDatabase(url, content);
       }
-  
+
       const fileName = url.split("/").pop();
       const jsonContent = yaml.load(content); // Convert YAML content to JSON
       yamlFiles[fileName] = jsonContent;
     };
+
+    const processWebhookUrl = async (url) => {
+      let content = await downloadFile(url);
   
-    const promises = yamlUrls.map(processUrl);
+      // Parse the markdown content and store it in the webhook_md table
+      const tokens = md.parse(content, {});
+  
+      let currentSection = "";
+      let currentContent = "";
+  
+      for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+  
+        if (token.type === "heading_open" && token.tag === "h1") {
+          if (currentSection && currentContent) {
+            saveWebhookToDatabase(currentSection, currentContent.trim());
+          }
+  
+          currentSection = tokens[i + 1].content;
+          currentContent = "";
+        } else {
+          currentContent += md.renderer.render([token], md.options);
+        }
+      }
+  
+      if (currentSection && currentContent) {
+        saveWebhookToDatabase(currentSection, currentContent.trim());
+      }
+  
+      webhookFiles = content;
+    };
+
+    await processWebhookUrl('https://developers.welcomesoftware.com/webhooks.md')
+    
+    const promises = yamlUrls.map(processYamlUrl);
     await Promise.all(promises);
-  
-    res.send(yamlFiles);
-  });
+
+    res.send({ yamlFiles, webhookFiles });
+
+  } catch (error) {
+    console.error("Error fetching and downloading YAML files:", error);
+    res.status(500).send("Error fetching and downloading YAML files");
+  }
+});
+
 
   app.post("/gpt-api-call", async (req, res) => {
     const formValues = req.body;

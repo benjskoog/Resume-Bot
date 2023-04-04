@@ -1,23 +1,29 @@
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const axios = require("axios");
-const cheerio = require("cheerio");
-const puppeteer = require("puppeteer");
-const yaml = require("js-yaml");
-const bodyParser = require("body-parser");
-const { db, getTableData } = require("./db");
-const { Configuration, OpenAIApi } = require("openai");
-const fs = require("fs");
-const path = require("path");
-const markdownIt = require("markdown-it");
+import dotenv from "dotenv";
+import express from "express";
+import cors from "cors";
+import axios from "axios";
+import cheerio from "cheerio";
+import puppeteer from "puppeteer";
+import yaml from "js-yaml";
+import bodyParser from "body-parser";
+import { db, getTableData } from "./db.js";
+import fs from "fs";
+import path from "path";
+import markdownIt from "markdown-it";
+import { OpenAI } from "langchain/llms";
+import { PromptTemplate } from "langchain/prompts";
+import { LLMChain } from "langchain/chains";
+import { initializeAgentExecutor } from 'langchain/agents';
+import { JsonToolkit, createJsonAgent } from 'langchain/agents';
+import { JsonSpec } from 'langchain/tools';
+import { loadQAStuffChain, loadQAMapReduceChain } from "langchain/chains";
+import { Document } from "langchain/document";
+import { resourceLimits } from "worker_threads";
+import { HNSWLib } from "langchain/vectorstores";
+import { OpenAIEmbeddings } from "langchain/embeddings";
+
+dotenv.config();
 const md = markdownIt();
-
-const configuration = new Configuration({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-const openai = new OpenAIApi(configuration);
 
 const app = express();
 const PORT = 3001;
@@ -203,57 +209,119 @@ app.get("/fetch-and-download-yaml-files", async (req, res) => {
 });
 
 
-  app.post("/gpt-api-call", async (req, res) => {
-    const formValues = req.body;
-    const openApiBase = JSON.stringify(formValues.yamlFiles['openapi.yaml?hash=5b202b8'].paths);
-    const prompt = `The following is a request by a user regarding the API documentation of the Optimizely Content Marketing Platform:
+app.post("/gpt-api-call", async (req, res) => {
+  const formValues = req.body;
+  const query = formValues.query;
+  const documentation = formValues.yamlFiles;
 
-    ${formValues.query}
-
-    From the categories below, please choose the category that is most appropriate for this request. Choose only one category.
-    
-    Authentication and Authorization: Questions related to API keys, access control, and user permissions.
-
-    Endpoint Usage: Questions about how to use specific endpoints, including required parameters, HTTP methods, and response structures.
-
-    Data Models: Questions related to the data structures and objects used within the API, such as assets, tasks, campaigns, and users.
-
-    Error Handling: Questions about how to handle errors, interpret error codes, and troubleshoot issues with API calls.
-
-    Rate Limits and Performance: Questions about the API's rate limits, best practices for optimizing performance, and handling large volumes of requests.
-
-    Backward Compatibility: Questions about the compatibility of the API with previous versions and how to handle potential changes in the API.
-
-    API Integration: Questions about integrating the Welcome API with other services or platforms, such as work management systems or document approval systems.
-
-    API Status and Updates: Questions about the stability of the API, experimental features, and any upcoming changes or improvements.
-
-    Recommendations and Best Practices: Questions about recommended ways to interact with the API, such as building URLs, handling pagination, and following conventions.
-
-    SDKs and Libraries: Questions about any available SDKs, client libraries, or helper tools that simplify interaction with the API.
-    
-    <:endoftext:>`;
-    console.log(prompt);
-  
-    try {
-      const completion = await openai.createChatCompletion({
-        model: "gpt-3.5-turbo",
-        messages: [{role: "user", content: prompt}],
-      });
-  
-      const result = completion.data.choices[0].message.content.trim();
-      console.log(result)
-      res.send({ assessment: result });
-    } catch (error) {
-      if (error.response) {
-        console.log(error.response.status);
-        console.log(error.response.data);
-      } else {
-        console.log(error.message);
-      }
-      res.status(500).send("Error fetching GPT-3.5 API");
+  const getDocumentationString = (refs, documentation) => {
+    if (!refs || !documentation) {
+      return "";
     }
-  });
+  
+    let documentationString = "";
+  
+    refs.forEach((ref) => {
+      const encodedRef = ref.replace('{', '%7B').replace('}', '%7D');
+      const strippedRef = encodedRef.split('/').pop();
+  
+      const yamlFile = documentation[strippedRef];
+      if (!yamlFile) {
+        return;
+      }
+  
+      const recursiveExpand = (obj) => {
+        for (const key in obj) {
+          if (typeof obj[key] === "object") {
+            recursiveExpand(obj[key]);
+          } else if (key === "$ref") {
+            const ref = obj[key];
+            const encodedRef2 = ref.replace('{', '%7B').replace('}', '%7D');
+            const strippedRef2 = encodedRef2.split('/').pop();
+            const refContent = getDocumentationString([ref], documentation);
+  
+            // Replace the $ref key with the strippedRef value
+            // and the $ref value with the contents of the $ref YAML file
+            delete obj[key];
+            obj[strippedRef2] = JSON.parse(refContent);
+          }
+        }
+      };
+  
+      recursiveExpand(yamlFile);
+      documentationString += JSON.stringify(yamlFile, null, 2);
+    });
+  
+    return documentationString;
+  };
+
+  const pathData = documentation['openapi.yaml?hash=5b202b8'].paths;
+  const pathString = JSON.stringify(pathData);
+  const tags = documentation['openapi.yaml?hash=5b202b8'].tags;
+  const tagsString = JSON.stringify(tags);
+  console.log(query)
+  const model = new OpenAI({ modelName: 'gpt-3.5-turbo', openAIApiKey: process.env.OPENAI_API_KEY, temperature: 0.0 });
+
+  const tagTemplate = `Below is a user request regarding the Optimizely Content Marketing Platform API. I will include the documentation later. For now, I want you to categorize the request into the correct API Endpoint as listed below. Please only pick one API Endpoint. If there is no match, return the string "info".
+
+  Request: {query}
+
+  API Endpoints: {tagsString}
+  
+  This is the end of the prompt.`;
+
+  const tagPrompt = new PromptTemplate({ template: tagTemplate, inputVariables: ["query", "tagsString"] });
+  const tagChain = new LLMChain({ llm: model, prompt: tagPrompt });
+
+  const pathsArray = "['paths/tasks.yaml', 'paths/tasks_{id}.yaml', 'paths/tasks_{id}_assets.yaml', 'paths/tasks_{task_id}_assets_{asset_id}_drafts.yaml', 'paths/tasks_{task_id}_assets_{asset_id}_comments.yaml', 'paths/tasks_{id}_attachments.yaml', 'paths/tasks_{task_id}_articles_{article_id}.yaml', 'paths/tasks_{task_id}_images_{image_id}.yaml', 'paths/tasks_{task_id}_videos_{video_id}.yaml', 'paths/tasks_{task_id}_raw-files_{raw_file_id}.yaml', 'paths/tasks_{task_id}_comments.yaml']";
+  
+  try {
+    const resultEndpoint = await tagChain.call({ query: query, tagsString: tagsString });
+
+    const pathTemplate = `I have been tasked with categorizing a user's request about the Optimizely Content Marketing Platform API into the correct API Endpoint. Using the paths documentation, please return an array of all of the "$ref" values corresponding to the paths containing the correct API Endpoint. The request, the correct API Endpoint, and the path documentation are below:
+    
+    Request: {request}
+
+    Correct API Endpoint: {result}
+
+    Paths documentation: {pathString}
+
+    Here is an example: ['paths/example_path.yaml', 'paths/example_path2.yaml', ...]
+    
+    This is the end of the prompt.`;
+
+    const pathPrompt = new PromptTemplate({ template: pathTemplate, inputVariables: ["request", "result", "pathString"] });
+    const pathChain = new LLMChain({ llm: model, prompt: pathPrompt });
+
+    const resultPath = await pathChain.call({ request: query, result: resultEndpoint.text.trim(), pathString: pathString });
+
+    console.log(resultPath.text.trim())
+
+    const expandedDoc = getDocumentationString(JSON.parse(resultPath.text.trim().replace(/'/g, "\"")), documentation);
+
+    console.log(expandedDoc)
+
+    const finalTemplate = `Below is a user request regarding the Optimizely Content Marketing Platform API. The relevant documentation is included below as well. Please provide an answer to the user given the documentation:
+    
+    Request: {request}
+    
+    Documentation: {documentation}
+
+    This is the end of the prompt.`;
+
+    const finalPrompt = new PromptTemplate({ template: finalTemplate, inputVariables: ["request", "documentation"] });
+    const finalChain = new LLMChain({ llm: model, prompt: finalPrompt });
+
+    //const finalPath = await pathChain.call({ request: query, documentation: expandedDoc });
+
+    const assessment = expandedDoc;
+    //console.log(assessment);
+    res.send({ assessment: assessment });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send('Error fetching GPT-3.5 API');
+  }
+});
 
   app.get("/get-database-tables", (req, res) => {
     db.all("SELECT name FROM sqlite_master WHERE type='table'", [], (err, rows) => {

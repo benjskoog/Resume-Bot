@@ -1,0 +1,25 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
+  font-family: "Arial", sans-serif;
+}
+
+.assessment {
+  max-width: 800px;
+  margin-top: 2rem;
+  padding: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+}
+
+h1,
+h2 {
+  margin-bottom: 1rem;
+}
+
+h2 {
+  font-size: 1.25rem;
+}

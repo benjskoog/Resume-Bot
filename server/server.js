@@ -21,6 +21,7 @@ import { Document } from "langchain/document";
 import { resourceLimits } from "worker_threads";
 import { HNSWLib } from "langchain/vectorstores";
 import { OpenAIEmbeddings } from "langchain/embeddings";
+import { TextLoader } from "langchain/document_loaders";
 
 dotenv.config();
 const md = markdownIt();
@@ -255,6 +256,51 @@ app.post("/gpt-api-call", async (req, res) => {
     return documentationString;
   };
 
+  const directory = path.join(process.cwd(), 'embeddings');
+
+  const saveDocumentationEmbeddings = async (documentation, directory) => {
+    // Define the vector store file path
+    const vectorStoreFilePath = path.join(directory, "hnswlib.bin");
+  
+    // Check if the file already exists in the directory
+    if (!fs.existsSync(vectorStoreFilePath)) {
+      
+      //const loader = new TextLoader(JSON.stringify(documentation));
+      //const docs = await loader.load();
+
+      const docString = JSON.stringify(documentation).trim()
+      console.log(docString);
+  
+      // Create a vector store from the documentation text
+      const vectorStore = await HNSWLib.fromTexts(
+        ["Hello world", "Bye bye", "hello nice world"],
+        [{ id: 2 }, { id: 1 }, { id: 3 }],
+        new OpenAIEmbeddings()
+      );
+  
+      // Save the vector store to the specified directory
+      await vectorStore.save(directory);
+    }
+  };
+  
+  await saveDocumentationEmbeddings(documentation['openapi.yaml?hash=5b202b8'].paths, directory);
+  
+  // Load the vector store from the same directory
+  /*
+  const loadedVectorStore = await HNSWLib.load(
+    directory,
+    new OpenAIEmbeddings()
+  );
+  
+  
+  // vectorStore and loadedVectorStore are identical
+  const result = await loadedVectorStore.similaritySearch(query, 1);
+  //console.log(result);
+  res.send(result);
+
+  */
+
+  /*
   const pathData = documentation['openapi.yaml?hash=5b202b8'].paths;
   const pathString = JSON.stringify(pathData);
   const tags = documentation['openapi.yaml?hash=5b202b8'].tags;
@@ -321,6 +367,8 @@ app.post("/gpt-api-call", async (req, res) => {
     console.error(error.message);
     res.status(500).send('Error fetching GPT-3.5 API');
   }
+
+  */
 });
 
   app.get("/get-database-tables", (req, res) => {

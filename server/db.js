@@ -20,14 +20,14 @@ db.serialize(() => {
   db.run(
     `CREATE TABLE IF NOT EXISTS resume (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      content TEXT UNIQUE
+      content TEXT
     )`
   );
 
   db.run(
     `CREATE TABLE IF NOT EXISTS linkedIn (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      content TEXT UNIQUE
+      content TEXT
     )`
   );
   

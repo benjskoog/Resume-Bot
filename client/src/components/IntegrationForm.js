@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 
-const APIIntegrationForm = ({ onSubmit }) => {
+const ResumeBot = ({ onSubmit }) => {
   const [query, setQuery] = useState("");
 
   const handleKeyDown = async (event) => {
@@ -20,9 +20,9 @@ const APIIntegrationForm = ({ onSubmit }) => {
       </Link>
       <div className="flex justify-center mt-12 mb-4">
         <form className="w-full max-w-4xl">
-          <h1 className="text-2xl font-bold mb-4">Welcome to Optimizely CMP API Bot</h1>
+          <h1 className="text-2xl font-bold mb-4">Ben Skoog's Work Experience Bot</h1>
           <p className="text-lg mb-4">
-            Ask me anything about the Optimizely CMP API!
+            Ask me anything about Ben!
           </p>
           <form className="stretch mx-2 flex flex-row gap-3 last:mb-2 md:mx-4 md:last:mb-6 lg:mx-auto lg:max-w-2xl xl:max-w-3xl">
           <div class="relative flex h-full flex-1 md:flex-col">
@@ -53,4 +53,4 @@ const APIIntegrationForm = ({ onSubmit }) => {
   );
 };
 
-export default APIIntegrationForm;
+export default ResumeBot;

@@ -18,35 +18,17 @@ const db = new sqlite3.Database(dbPath, (err) => {
 // Initialize database with tables to store YAML files and webhook markdown files
 db.serialize(() => {
   db.run(
-    `CREATE TABLE IF NOT EXISTS yaml_files (
+    `CREATE TABLE IF NOT EXISTS resume (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      url TEXT UNIQUE,
-      content TEXT
+      content TEXT UNIQUE
     )`
   );
 
   db.run(
-    `CREATE TABLE IF NOT EXISTS clean_API (
+    `CREATE TABLE IF NOT EXISTS linkedIn (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      filename TEXT UNIQUE,
-      content TEXT
+      content TEXT UNIQUE
     )`
-  );
-
-  db.run(
-    `CREATE TABLE IF NOT EXISTS webhook_md (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      section TEXT,
-      header TEXT,
-      content TEXT
-    )`,
-    (err) => {
-      if (err) {
-        console.error("Error creating webhook_md table:", err);
-      } else {
-        console.log("webhook_md table created or already exists.");
-      }
-    }
   );
   
 });

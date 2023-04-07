@@ -26,8 +26,18 @@ db.serialize(() => {
   );
 
   db.run(
+    `CREATE TABLE IF NOT EXISTS clean_API (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      filename TEXT UNIQUE,
+      content TEXT
+    )`
+  );
+
+  db.run(
     `CREATE TABLE IF NOT EXISTS webhook_md (
-      section TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      section TEXT,
+      header TEXT,
       content TEXT
     )`,
     (err) => {
@@ -38,6 +48,7 @@ db.serialize(() => {
       }
     }
   );
+  
 });
 
 async function getTableData(tableName) {

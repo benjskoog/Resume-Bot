@@ -12,11 +12,29 @@ const db = new sqlite3.Database(dbPath, (err) => {
     console.error("Error opening database:", err.message);
   } else {
     console.log("Connected to SQLite database.");
+    db.exec("PRAGMA foreign_keys = ON;");
   }
 });
 
-// Initialize database with tables to store YAML files and webhook markdown files
+
 db.serialize(() => {
+  db.run(
+    `CREATE TABLE IF NOT EXISTS chat (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chain_id TEXT
+    )`
+  );
+
+  db.run(
+    `CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chain_id TEXT,
+      message TEXT,
+      timestamp TEXT,
+      FOREIGN KEY (chain_id) REFERENCES chat(chain_id) ON DELETE CASCADE
+    )`
+  );
+
   db.run(
     `CREATE TABLE IF NOT EXISTS resume (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +48,9 @@ db.serialize(() => {
       content TEXT
     )`
   );
-  
+
+  db.run(`DROP TABLE IF EXISTS chains`);
+
 });
 
 async function getTableData(tableName) {

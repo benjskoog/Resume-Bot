@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
+import TopBar from './TopBar';
 
 function DataSources({ onBack }) {
   const [tables, setTables] = useState([]);
@@ -40,6 +41,7 @@ function DataSources({ onBack }) {
       try {
         const response = await axios.get("http://localhost:3001/get-database-tables");
         setTables(response.data.tables);
+        console.log(response.data)
       } catch (error) {
         console.error("Error fetching database tables:", error);
       }
@@ -50,11 +52,7 @@ function DataSources({ onBack }) {
 
   return (
     <div>
-      <h2>Data Sources</h2>
-      <div>
-        <input type="file" onChange={handleFileChange} />
-        <button onClick={handleFileUpload}>Upload File</button>
-      </div>
+      <TopBar text={'Data Sources'} />
       <ul>
         {tables.map((table, index) => (
           <li key={index}>
@@ -62,9 +60,10 @@ function DataSources({ onBack }) {
           </li>
         ))}
       </ul>
-      <Link to="/">
-        <button>Back to Main Page</button>
-      </Link>
+      <div>
+        <input type="file" onChange={handleFileChange} />
+        <button onClick={handleFileUpload}>Upload File</button>
+      </div>
     </div>
   );
 }

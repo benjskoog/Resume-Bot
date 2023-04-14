@@ -1,9 +1,6 @@
 import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
-import axios from "axios";
-import cheerio from "cheerio";
-import puppeteer from "puppeteer";
 import yaml from "js-yaml";
 import bodyParser from "body-parser";
 import { db, getTableData } from "./db.js";
@@ -15,9 +12,11 @@ import {
   SystemMessagePromptTemplate,
   HumanMessagePromptTemplate,
   ChatPromptTemplate,
-  PromptTemplate
+  PromptTemplate,
+  MessagesPlaceholder
 } from "langchain/prompts";
-import { LLMChain } from "langchain/chains";
+import { BufferMemory } from "langchain/memory";
+import { LLMChain, ConversationChain } from "langchain/chains";
 import { ChatOpenAI } from "langchain/chat_models";
 import { HumanChatMessage, SystemChatMessage } from "langchain/schema";
 import { initializeAgentExecutor } from 'langchain/agents';
@@ -107,75 +106,71 @@ app.post("/gpt-api-call", async (req, res) => {
   const query = formValues.query;
   const resume = formValues.resume;
 
-  console.log(req.body.chain)
+  const chat = new ChatOpenAI({
+    modelName: "gpt-3.5-turbo",
+    openAIApiKey: process.env.OPENAI_API_KEY,
+    temperature: 0,
+  });
   
-  const chat = new ChatOpenAI({ modelName: 'gpt-3.5-turbo', openAIApiKey: process.env.OPENAI_API_KEY, temperature: 0 });
+  let templateString = `Your name is Ben. You are being interviewed for a Solutions Consultant role at at tech company. You are arrogant and think you are the GOAT. You have a tendency to call people chumps.
+
+  An interviewer will be asking questions about your resume, which is below. Answer the questions and act condescending toward the interviewer. Do not forget to call yourself the GOAT and tell the interviewer they are a chump.
+
+  Your resume:` + resume;
 
   const resumePrompt = ChatPromptTemplate.fromPromptMessages([
-    SystemMessagePromptTemplate.fromTemplate(
-      `You are an assistant that helps employers answer questions about a job applicant based on their resume. Please provide answers to their questions and include examples from the resume if applicable.
-
-      Job applicant resume:
-      {resume}`
+    /*
+    SystemMessagePromptTemplate.fromTemplate(templateString
     ),
+    */
+    new MessagesPlaceholder("history"),
     HumanMessagePromptTemplate.fromTemplate("{query}"),
   ]);
   
-  const chainId = req.body.chainId ? req.body.chainId : new Date().getTime(); // Generate a unique identifier based on the current timestamp
-  const chain = chainId ? chains.get(chainId) : new LLMChain({
-    prompt: resumePrompt,
-    llm: chat,
-  });
+  const chainId = req.body.chainId
+    ? req.body.chainId
+    : new Date().getTime(); // Generate a unique identifier based on the current timestamp
 
-  chains.set(chainId, chain);
+    let chain = chains.get(chainId);
 
-  console.log(chain);
-
-  try {
-    const resultEndpoint = await chain.call({
-      resume: resume,
-      query: query
-    });
-
-    const answer = resultEndpoint.text;
-
-    //console.log(assessment);
-    res.send({ answer: answer, chainId: chainId });
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Error fetching GPT-3.5 API');
-  }
-
-
-  /*
-
-  const model = new OpenAI({ modelName: 'gpt-3.5-turbo', openAIApiKey: process.env.OPENAI_API_KEY, temperature: 0.0 });
-
-  const template = `An employer is asking a question about this job seeker's resume, which is provided below. Please provide an answer and include examples from the resume if possible.
-
-  Employer question: {query}
-
-  Job seeker resume:
-  {resume}
-
-  This is the end of the prompt.`;
-
-  const prompt = new PromptTemplate({ template: template, inputVariables: ["query", "resume"] });
-  console.log(prompt)
-  const tagChain = new LLMChain({ llm: model, prompt: prompt });
+    if (!chain) {
+      chain = new ConversationChain({
+        memory: new BufferMemory({ returnMessages: true, memoryKey: "history" }),
+        prompt: resumePrompt,
+        llm: chat,
+      });
   
-  try {
-    const resultEndpoint = await tagChain.call({ query: query, resume: resume});
+      chains.set(chainId, chain);
+  
+      // Insert a new chat row
+      db.run(`INSERT INTO chat (chain_id) VALUES (?)`, [chainId]);
+    }
 
-    const answer = resultEndpoint.text;
+    try {
+      const resultEndpoint = await chain.call({
+        query: query,
+      });
+      console.log(resultEndpoint)
+      const answer = resultEndpoint.response;
+      console.log(answer);
+  
+      // Insert user query and API response into the messages table
+      const timestamp = new Date().toISOString();
+      db.run(
+        `INSERT INTO messages (chain_id, message, timestamp) VALUES (?, ?, ?)`,
+        [chainId, query, timestamp]
+      );
+      db.run(
+        `INSERT INTO messages (chain_id, message, timestamp) VALUES (?, ?, ?)`,
+        [chainId, answer, timestamp]
+      );
+  
+      res.send({ answer: answer, chainId: chainId });
+    } catch (error) {
+      console.error(error);
+      res.status(500).send("Error fetching GPT-3.5 API");
+    }
 
-    //console.log(assessment);
-    res.send({ answer: answer });
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Error fetching GPT-3.5 API');
-  }
-*/
 });
 
   app.get("/get-database-tables", (req, res) => {

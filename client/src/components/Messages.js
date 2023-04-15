@@ -9,7 +9,7 @@ const Messages = ({ messages }) => {
                 <div className="flex flex-grow flex-col gap-3">
                   <div className="min-h-[20px] flex flex-col items-start gap-4 whitespace-pre-wrap">
                     <div className="markdown prose w-full break-words dark:prose-invert light">
-                      <p>Hi, my name is Ben. Nice to meet you. Please feel free to ask me questions about my work experience!</p>
+                      <p>Hi, my name is Beatrice. Nice to meet you. Please feel free to ask me questions about my work experience!</p>
                     </div>
                   </div>
                 </div>

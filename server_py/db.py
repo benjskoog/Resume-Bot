@@ -25,6 +25,7 @@ async def setup_db():
 
             CREATE TABLE IF NOT EXISTS resume (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                section TEXT,
                 content TEXT
             );
 
@@ -36,6 +37,15 @@ async def setup_db():
             DROP TABLE IF EXISTS chains;
             """
         )
+        
+        cursor = await db.cursor()
+        await cursor.execute("PRAGMA table_info(resume);")
+        column_names = [row[1] for row in await cursor.fetchall()]
+        
+        # Add the section column if it does not exist
+        if "section" not in column_names:
+            await db.execute("ALTER TABLE resume ADD COLUMN section TEXT;")
+            
         await db.commit()
 
 

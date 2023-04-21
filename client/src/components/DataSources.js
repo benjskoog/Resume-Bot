@@ -1,38 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
-import TopBar from './TopBar';
+import FileUploader from "./FileUploader";
 
 function DataSources({ onBack }) {
   const [tables, setTables] = useState([]);
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleFileChange = (e) => {
-    setSelectedFile(e.target.files[0]);
-  };
-
-  const handleFileUpload = async () => {
-    if (!selectedFile) {
-      alert("Please select a file first.");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-
-    try {
-      const response = await axios.post("http://localhost:3001/upload-resume", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-      if (response.data.success) {
-        alert("Resume uploaded successfully.");
-      } else {
-        alert("Error uploading resume.");
-      }
-    } catch (error) {
-      console.error("Error uploading resume:", error);
+  const closeModal = (e) => {
+    if (e.target === e.currentTarget) {
+      setIsModalOpen(false);
     }
   };
 
@@ -51,19 +28,40 @@ function DataSources({ onBack }) {
   }, []);
 
   return (
-    <div>
-      <TopBar text={'Data Sources'} />
-      <ul>
+<div className="overflow-y-auto bg-gray-100 h-[calc(100vh-72px)] max-w-full">
+      <div className="pt-8 px-8">
+        <button
+          className="bg-gray-900 text-white active:bg-slate-600 uppercase text-5xl leading-none w-10 h-10 p-0 rounded-full shadow-lg hover:shadow-md outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 flex items-center justify-center"
+          type="button"
+          onClick={() => setIsModalOpen(true)}
+        >
+          <span className="relative" style={{ top: "-0.125em" }}>+</span>
+        </button>
+      </div>
+      <ul className="space-x-4 pt-8 px-8 flex">
         {tables.map((table, index) => (
           <li key={index}>
-            <Link to={`/datasources/${table.name}`}>{table.name}</Link>
+            <Link className="p-6 max-w-sm mx-auto bg-white rounded-xl shadow-lg flex items-center space-x-4" to={`/datasources/${table.name}`}>
+              <div>
+              <div className="text-xl font-medium text-black">
+                {table.name}
+              </div>
+              <p className="text-slate-500">You have a new message!</p>
+              </div>
+            </Link>
           </li>
         ))}
       </ul>
-      <div>
-        <input type="file" onChange={handleFileChange} />
-        <button onClick={handleFileUpload}>Upload File</button>
-      </div>
+      {isModalOpen && (
+        <div
+        className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50"
+          onClick={closeModal}
+        >
+          <div className="bg-white rounded shadow-lg relative w-1/2">
+            <FileUploader setIsModalOpen={setIsModalOpen} closeModal={closeModal}/>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

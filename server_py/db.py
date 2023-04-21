@@ -12,19 +12,22 @@ async def setup_db():
             """
             CREATE TABLE IF NOT EXISTS chat (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
                 chain_id TEXT
             );
 
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
                 chain_id TEXT,
                 message TEXT,
                 timestamp TEXT,
                 FOREIGN KEY (chain_id) REFERENCES chat(chain_id) ON DELETE CASCADE
             );
-
+            
             CREATE TABLE IF NOT EXISTS resume (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
                 section TEXT,
                 content TEXT
             );
@@ -32,6 +35,14 @@ async def setup_db():
             CREATE TABLE IF NOT EXISTS linkedIn (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 content TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                first_name TEXT NOT NULL,
+                last_name TEXT,
+                email TEXT UNIQUE NOT NULL, 
+                password TEXT NOT NULL
             );
 
             DROP TABLE IF EXISTS chains;
@@ -45,14 +56,20 @@ async def setup_db():
         # Add the section column if it does not exist
         if "section" not in column_names:
             await db.execute("ALTER TABLE resume ADD COLUMN section TEXT;")
-            
+
         await db.commit()
 
 
-async def get_table_data(table_name):
+async def get_table_data(table_name, user_id):
     async with aiosqlite.connect(db_path) as db:
         cursor = await db.cursor()
-        await cursor.execute(f"SELECT * FROM {table_name}")
+
+        if table_name == "users":
+            # Filter rows by user_id only for the "users" table
+            await cursor.execute(f"SELECT * FROM {table_name} WHERE id = ?", (user_id,))
+        else:
+            # No filtering for other tables
+            await cursor.execute(f"SELECT * FROM {table_name} WHERE user_id = ?", (user_id,))
         
         # Fetch column names from the cursor description
         column_names = [column[0] for column in cursor.description]

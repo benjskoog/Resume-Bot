@@ -1,14 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Messages from './Messages';
 import TopBar from './TopBar';
 import BottomInput from './BottomInput';
 
-const Chat = ({ messages, onSubmit }) => {
+const Chat = ({ onSubmit, messages, fetchingResponse }) => {
+
   return (
-    <>   
-      <TopBar text={'Ben Bot'}/>
-      <Messages messages={messages}/>
+    <>
+    <div class="overflow-y-auto flex h-[calc(100vh-190px)] max-w-full flex-1 flex-col">
+      <Messages
+        messages={messages}
+        fetchingResponse={fetchingResponse}
+      />
       <BottomInput onSubmit={onSubmit}/>
+    </div>
     </>
   );
 };

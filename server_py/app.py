@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 import os
 import aiosqlite
+from dotenv import load_dotenv
 from langchain.llms import OpenAI
 from langchain.prompts import (
     SystemMessagePromptTemplate,
@@ -31,7 +32,8 @@ import time
 import re
 from typing import List, Tuple
 import spacy
-
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 CORS(app)
@@ -40,7 +42,14 @@ DATABASE = "data.db"
 
 chains = {}
 
+load_dotenv()
+
 api_key = os.environ.get("OPENAI_API_KEY")
+app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY")
+
+print(os.environ.get("JWT_SECRET_KEY"))
+
+jwt = JWTManager(app)
 
 # Load the spaCy English model
 nlp = spacy.load('en_core_web_sm')
@@ -115,9 +124,72 @@ async def close_db(e=None):
 
 app.teardown_appcontext(close_db)
 
+@app.route("/register", methods=["POST"])
+async def register():
+    data = request.get_json()
+    print(data)
+
+    # Check if the user already exists
+    db = await get_db()
+    cursor = await db.cursor()
+    await cursor.execute("SELECT * FROM users WHERE email=?", (data["email"],))
+    existing_user = await cursor.fetchone()
+
+    if existing_user:
+        return jsonify({"error": "User already exists"}), 400
+
+    # Create the new user
+    hashed_password = generate_password_hash(data["password"], method="sha256")
+    await cursor.execute("INSERT INTO users (first_name, last_name, email, password) VALUES (?, ?, ?, ?)", (data['first_name'], data['last_name'], data['email'], hashed_password))
+    await db.commit()
+    await cursor.execute("SELECT * FROM users WHERE email=?", (data["email"],))
+    user = await cursor.fetchone()
+
+    return jsonify({"id": user[0], "email": user[3], "first_name": user[1], "last_name": user[2]}), 201
+
+@app.route("/login", methods=["POST"])
+async def login():
+    data = request.get_json()
+
+    # Check if the user exists
+    db = await get_db()
+    cursor = await db.cursor()
+    await cursor.execute("SELECT * FROM users WHERE email=?", (data["email"],))
+    user = await cursor.fetchone()
+    print(user[3])
+
+    if not user or not check_password_hash(user[4], data["password"]):
+        return jsonify({"error": "Invalid username or password"}), 401
+
+    # Create the access token
+    access_token = create_access_token(identity=user[3])
+
+    return jsonify({"access_token": access_token, "id": user[0], "email": user[3], "first_name": user[1], "last_name": user[2]}), 200
+
+@app.route("/profile", methods=["GET"])
+@jwt_required()
+async def profile():
+    current_user = get_jwt_identity()
+    
+    # Fetch user data from the database
+    db = await get_db()
+    cursor = await db.cursor()
+    await cursor.execute("SELECT * FROM users WHERE username=?", (current_user,))
+    user_data = await cursor.fetchone()
+
+    if not user_data:
+        return jsonify({"error": "User not found"}), 404
+
+    return jsonify({"username": user_data[1]}), 200
+
+
 @app.route("/upload-resume", methods=["POST"])
 async def upload_resume():
+    user_id = request.form.get("id")
+    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
+    os.makedirs(user_embeddings_directory, exist_ok=True)
     docs = []
+
     def extract_raw_text(resume_buffer):
         document = Document(BytesIO(resume_buffer))
         plain_text = ""
@@ -148,17 +220,21 @@ async def upload_resume():
 
         return sections
 
+    user_id = request.form.get("id")
 
-    async def save_resume_to_database(resume_sections: List[Tuple[str, str]]):
+    async def save_resume_to_database(user_id: int, resume_sections: List[Tuple[str, str]]):
         db = await get_db()
         cursor = await db.cursor()
 
         # Delete existing resume data
-        await cursor.execute("DELETE FROM resume")
+        await cursor.execute("DELETE FROM resume WHERE user_id=?", (user_id,))
 
+        # Insert full resume
+        await cursor.execute("INSERT INTO resume (user_id, section, content) VALUES (?, ?, ?)", (user_id, "FULL RESUME", plain_text))
+        
         # Insert each section as a new row in the "resume" table
         for section, content in resume_sections:
-            await cursor.execute("INSERT INTO resume (section, content) VALUES (?, ?)", [section, content])
+            await cursor.execute("INSERT INTO resume (user_id, section, content) VALUES (?, ?, ?)", (user_id, section, content))
             docs.append(section + " " + content)
 
         await db.commit()
@@ -174,7 +250,7 @@ async def upload_resume():
     try:
         plain_text = extract_raw_text(resume_buffer)
         resume_sections = split_resume_into_sections(plain_text)
-        await save_resume_to_database(resume_sections)
+        await save_resume_to_database(user_id, resume_sections)
         embeddings = OpenAIEmbeddings()
         text_splitter = RecursiveCharacterTextSplitter(
             # Set a really small chunk size, just to show.
@@ -184,7 +260,7 @@ async def upload_resume():
         )
         docs_chunked = text_splitter.create_documents([plain_text])
         print(docs_chunked)
-        vec_db = Chroma.from_documents(documents=docs_chunked, embedding=embeddings, persist_directory=persist_directory)
+        vec_db = Chroma.from_documents(documents=docs_chunked, embedding=embeddings, persist_directory=user_embeddings_directory)
         vec_db.persist()
         return jsonify(success=True, message="Resume uploaded and parsed successfully.")
     except Exception as e:
@@ -216,10 +292,14 @@ async def gpt_api_call():
     db = await get_db()
     form_values = request.json
     query = form_values["query"]
+    user_id = form_values["id"]
+    print(user_id)
+
+    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
 
     embeddings = OpenAIEmbeddings()
 
-    vec_db = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
+    vec_db = Chroma(persist_directory=user_embeddings_directory, embedding_function=embeddings)
 
     docs = vec_db.similarity_search_with_score(query)
     print(docs)
@@ -245,7 +325,7 @@ async def gpt_api_call():
     resume_prompt = ChatPromptTemplate(
         input_variables=['context', 'question'],
         messages = [
-            SystemMessagePromptTemplate.from_template(template_string_beatrice),
+            SystemMessagePromptTemplate.from_template(template_string_ben),
             # MessagesPlaceholder(variable_name="history"),
             HumanMessagePromptTemplate.from_template("{question}")
         ]
@@ -304,7 +384,7 @@ async def get_database_tables():
     try:
         db = await get_db()
         cur = await db.cursor()
-        await cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        await cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence'")
         rows = await cur.fetchall()
         table_names = list(map(lambda row: {"name": row[0]}, rows))
         return jsonify(tables=table_names)
@@ -315,8 +395,10 @@ async def get_database_tables():
 
 @app.route("/get-table-data/<string:table_name>", methods=["GET"])
 async def get_table_data_route(table_name):
+    user_id = request.args.get("user_id")
+    
     try:
-        table_data = await get_table_data(table_name)
+        table_data = await get_table_data(table_name, user_id)
         print(table_data)
         return table_data
     except Exception as e:

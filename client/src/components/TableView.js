@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
+import UserContext from './UserContext';
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import TopBar from './TopBar';
@@ -6,13 +7,17 @@ import TopBar from './TopBar';
 function TableView() {
   const [tableData, setTableData] = useState([]);
   const { tableName } = useParams();
+  const { user } = useContext(UserContext);
+
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await axios.get(`http://localhost:3001/get-table-data/${tableName}`);
+        const response = await axios.get(`http://localhost:3001/get-table-data/${tableName}`, {
+          params: { user_id: user.id },
+        });
         setTableData(response.data);
-        console.log(response.data)
+        console.log(response.data);
       } catch (error) {
         console.error(`Error fetching data for table ${tableName}:`, error);
       }
@@ -22,37 +27,43 @@ function TableView() {
   }, [tableName]);
 
   return (
-    <div>
-      <TopBar text={'Data Sources'} />
-      <div className="markdown prose w-full break-words dark:prose-invert light text-center">
-        <h2>{tableName}</h2>
-      </div>
-      <div className="text-base gap-4 md:gap-6 md:max-w-2xl lg:max-w-xl xl:max-w-3xl p-3 md:py-6 flex lg:px-0 m-auto">
-      <div className="relative flex w-full flex-col gap-1 md:gap-3 lg:w-[calc(100%-115px)]">
-      <div className="flex flex-grow flex-col gap-3">
-      <div className="min-h-[20px] flex flex-col items-start gap-4 whitespace-pre-wrap">
-      <div className="markdown prose w-full break-words dark:prose-invert light">
-      <table>
-        <thead>
-          <tr>
-            {tableData.length > 0 &&
-              Object.keys(tableData[0]).reverse().map((header, index) => <th key={index}>{header}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {tableData.map((row, index) => (
-            <tr key={index}>
-              {Object.values(row).reverse().map((value, i) => (
-                <td key={i}>{value}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
-      </div>
-      </div>
-      </div>
+    <div className="overflow-y-auto antialiased bg-gray-100 text-gray-600 px-4 pt-8 h-[calc(100vh-72px)] min-h-[calc(100vh-72px)]">
+      <div className="flex flex-col">
+        <div className="w-full max-w-6xl mx-auto bg-white shadow-lg rounded-sm border border-gray-200 rounded-xl">
+          <header className="px-5 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-800">{tableName}</h2>
+          </header>
+          <div className="p-3">
+            <div className="">
+              <table className="table-auto w-full">
+                <thead className="text-xs font-semibold uppercase text-gray-400 bg-gray-50">
+                  <tr>
+                    {tableData.length > 0 &&
+                      Object.keys(tableData[0]).reverse().map((header, index) => 
+                        <th className="p-2 whitespace-pre-wrap" key={index}>
+                          <div className="font-semibold text-left">
+                            {header}
+                          </div>
+                        </th>)}
+                  </tr>
+                </thead>
+                <tbody className="text-sm divide-y divide-gray-100">
+                  {tableData.map((row, index) => (
+                    <tr key={index}>
+                      {Object.values(row).reverse().map((value, i) => (
+                        <td key={i} className="p-2 whitespace-pre-wrap break-words">
+                          <div className="text-left">
+                            {value}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

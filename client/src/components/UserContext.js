@@ -2,7 +2,7 @@ import React, { createContext, useState, useEffect } from "react";
 
 const UserContext = createContext();
 
-export const UserProvider = ({ children }) => {
+export const UserProvider = ({ children, resetStates }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true); // Add a loading state
 
@@ -28,6 +28,7 @@ export const UserProvider = ({ children }) => {
 
   const logout = () => {
     setUser(null);
+    resetStates();
     localStorage.removeItem("user");
   };
 

@@ -46,7 +46,7 @@ function DataSources({ onBack }) {
               <div className="text-xl font-medium text-black">
                 {table.name}
               </div>
-              <p className="text-slate-500">You have a new message!</p>
+              <p className="text-slate-500">Click to view data</p>
               </div>
             </Link>
           </li>

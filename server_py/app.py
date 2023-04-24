@@ -26,7 +26,7 @@ from langchain.vectorstores import Chroma
 from docx import Document
 from io import BytesIO
 from flask_uploads import UploadSet, configure_uploads, IMAGES
-from db import get_table_data, setup_db
+from db import get_table_data, delete_row, setup_db
 from datetime import datetime
 import time
 import re
@@ -354,7 +354,7 @@ async def gpt_api_call():
         chains[chain_id] = chain
 
         # Insert a new chat row
-        await db.execute("INSERT INTO chat (chain_id) VALUES (?)", [chain_id])
+        await db.execute("INSERT INTO chat (user_id, chat_id, chat_name) VALUES (?, ?, ?)", [user_id, chain_id, query])
         await db.commit()
     
     try:
@@ -365,12 +365,12 @@ async def gpt_api_call():
         # Insert user query and API response into the messages table
         timestamp = datetime.now().isoformat()
         await db.execute(
-        "INSERT INTO messages (chain_id, message, timestamp) VALUES (?, ?, ?)",
-        [chain_id, query, timestamp]
+        "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (?, ?, ?, ?, ?)",
+        ["user", user_id, chain_id, query, timestamp]
         )
         await db.execute(
-            "INSERT INTO messages (chain_id, message, timestamp) VALUES (?, ?, ?)",
-            [chain_id, answer, timestamp]
+            "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (?, ?, ?, ?, ?)",
+            ["bot", user_id, chain_id, answer, timestamp]
         )
         await db.commit()
 
@@ -404,6 +404,46 @@ async def get_table_data_route(table_name):
     except Exception as e:
         print(f"Error fetching data for table {table_name}:", e)
         return jsonify(error="An error occurred while fetching table data."), 500
+    
+@app.route("/delete-row/<string:table_name>", methods=["DELETE"])
+async def delete_row_route(table_name):
+    user_id = request.args.get("user_id")
+    row_id = request.args.get("row_id")
+    
+    try:
+        await delete_row(table_name, user_id, row_id)
+        return jsonify(success=True)
+    except Exception as e:
+        print(f"Error deleting row with id {row_id}:", e)
+        return jsonify(error="An error occurred while deleting the row."), 500
+    
+
+@app.route("/get-messages", methods=["GET"])
+async def get_messages_route():
+    user_id = request.args.get("user_id")
+    chat_id = request.args.get("chat_id")
+
+    try:
+        messages = await get_messages_by_chat_id(chat_id, user_id)
+        return jsonify(messages)
+    except Exception as e:
+        print(f"Error fetching messages for chat_id {chat_id}:", e)
+        return jsonify(error="An error occurred while fetching messages."), 500
+
+async def get_messages_by_chat_id(chat_id, user_id):
+    db = await get_db()
+
+    cursor = await db.cursor()
+
+    await cursor.execute("SELECT * FROM messages WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
+        
+    column_names = [column[0] for column in cursor.description]
+        
+    rows = await cursor.fetchall()
+        
+    result = [dict(zip(column_names, row)) for row in rows]
+        
+    return result
 
 
 if __name__ == "__main__":

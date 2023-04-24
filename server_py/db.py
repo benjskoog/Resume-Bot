@@ -10,19 +10,22 @@ async def setup_db():
         await db.execute("PRAGMA foreign_keys = ON;")
         await db.executescript(
             """
+
             CREATE TABLE IF NOT EXISTS chat (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
-                chain_id TEXT
+                chat_id TEXT,
+                chat_name TEXT
             );
 
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT,
                 user_id INTEGER,
-                chain_id TEXT,
+                chat_id TEXT,
                 message TEXT,
                 timestamp TEXT,
-                FOREIGN KEY (chain_id) REFERENCES chat(chain_id) ON DELETE CASCADE
+                FOREIGN KEY (chat_id) REFERENCES chat(chat_id) ON DELETE CASCADE
             );
             
             CREATE TABLE IF NOT EXISTS resume (
@@ -34,6 +37,7 @@ async def setup_db():
 
             CREATE TABLE IF NOT EXISTS linkedIn (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
                 content TEXT
             );
 
@@ -45,7 +49,6 @@ async def setup_db():
                 password TEXT NOT NULL
             );
 
-            DROP TABLE IF EXISTS chains;
             """
         )
         
@@ -80,6 +83,15 @@ async def get_table_data(table_name, user_id):
         result = [dict(zip(column_names, row)) for row in rows]
         
         return result
+    
+async def delete_row(table_name, user_id, row_id):
+    async with aiosqlite.connect(db_path) as db:
+        # Make sure to properly sanitize user input and handle possible errors
+        await db.execute(
+            f"DELETE FROM {table_name} WHERE id = ? AND user_id = ?",
+            (row_id, user_id),
+        )
+        await db.commit()
 
 
 # Initialize the database when the module is loaded

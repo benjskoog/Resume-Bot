@@ -29,7 +29,7 @@ const Messages = ({ messages, fetchingResponse }) => {
                 <div className="flex flex-grow flex-col gap-3">
                   <div className="min-h-[20px] flex flex-col items-start gap-4 whitespace-pre-wrap">
                     <div className="markdown prose w-full break-words dark:prose-invert light">
-                      <p>{message.content}</p>
+                      <p>{message.message}</p>
                     </div>
                   </div>
                 </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useImperativeHandle, useRef } from "react";
 import { BrowserRouter as Router, Route, Routes, useLocation, Link, Navigate } from 'react-router-dom';
 import UserContext from './UserContext';
 import BottomInput from './BottomInput';
@@ -11,22 +11,22 @@ import Login from './Login';
 import TopBar from './TopBar';
 import axios from "axios";
 
-function Main () {
+const Main = React.forwardRef((props, ref) => {
   const location = useLocation();
   const { user, loading } = useContext(UserContext);
-  const [messages, setMessages] = useState([]);
   const [resume, setResume] = useState({});
   const [linkedIn, setLinkedIn] = useState({});
-  const [chainId, setChainId] = useState(null);
-  const [fetchingResponse, setFetchingResponse] = useState(false);
+  const chatRef = useRef();
 
-  const clearState = () => {
-    setMessages([]);
+  const clearMainState = () => {
     setResume({});
     setLinkedIn({});
-    setChainId(null);
-    setFetchingResponse(false);
+    chatRef.current.clearChatState();
   };
+
+  useImperativeHandle(ref, () => ({
+    clearMainState,
+  }));
   
   async function fetchExperienceData() {
     try {
@@ -39,45 +39,6 @@ function Main () {
       return {};
     }
   }
-
-  const handleFormSubmit = async (formValues, clearForm) => {
-    const proxyEndpoint = "http://localhost:3001/gpt-api-call";
-    const data = {
-      id: user.id,
-      resume: resume,
-      linkedIn: linkedIn,
-      query: formValues.query,
-      chainId: chainId
-    };
-    console.log(data)
-
-    try {
-      // Add user message to messages state
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { type: "user", content: formValues.query },
-      ]);
-
-      setFetchingResponse(true);
-  
-      const response = await axios.post(proxyEndpoint, data);
-      const result = response.data.answer;
-      setChainId(response.data.chainId);
-      console.log(response.data);
-      console.log(fetchingResponse);
-  
-      // Add response to messages state
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { type: "response", content: result },
-      ]);
-      setFetchingResponse(false);
-  
-      console.log("Resume question answer:", result);
-    } catch (error) {
-      // ...
-    }
-  };
 
   useEffect(() => {
     async function fetchData() {
@@ -99,13 +60,14 @@ function Main () {
   return (
     <>
       <div className="overflow w-full h-full relative flex">
-      {user && <NavBar onLogout={clearState} />}
+      {user && <NavBar onNewChatClick={() => chatRef.current && chatRef.current.clearChatState()} />}
         <div class="flex-1 flex-col">
           <TopBar path={location.pathname}/>
 
             <Routes>
-              <Route path="/" element={<BottomInput onSubmit={handleFormSubmit} />} />
-              <Route path="/chat" element={<Chat messages={messages} onSubmit={handleFormSubmit} fetchingResponse={fetchingResponse} />} />
+              <Route path="/" element={<BottomInput />} />
+              <Route path="/chat" element={<Chat ref={chatRef} />} />
+              <Route path="/chat/:chatId" element={<Chat ref={chatRef} />} />
               <Route path="/datasources" element={<DataSources />} />
               <Route path="/datasources/:tableName" element={<TableView />} />
               <Route path="/register" element={<Register />} />
@@ -115,6 +77,6 @@ function Main () {
       </div>
     </>
   );
-};
+});
 
 export default Main;

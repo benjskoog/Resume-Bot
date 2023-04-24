@@ -9,6 +9,17 @@ function TableView() {
   const { tableName } = useParams();
   const { user } = useContext(UserContext);
 
+  const deleteRow = async (rowId) => {
+    try {
+      await axios.delete(`http://localhost:3001/delete-row/${tableName}`, {
+        params: { user_id: user.id, row_id: rowId },
+      });
+      setTableData((prevTableData) => prevTableData.filter((row) => row.id !== rowId));
+    } catch (error) {
+      console.error(`Error deleting row with id ${rowId}:`, error);
+    }
+  };
+
 
   useEffect(() => {
     async function fetchData() {
@@ -45,6 +56,11 @@ function TableView() {
                             {header}
                           </div>
                         </th>)}
+                        <th className="p-2 whitespace-pre-wrap">
+                          <div className="font-semibold text-left">
+                            Delete
+                          </div>
+                        </th>
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-gray-100">
@@ -57,6 +73,11 @@ function TableView() {
                           </div>
                         </td>
                       ))}
+                    <td className="p-2">
+                      <button onClick={() => deleteRow(row.id)} className="text-red-500 hover:text-red-700">
+                        Delete
+                      </button>
+                    </td>
                     </tr>
                   ))}
                 </tbody>

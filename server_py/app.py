@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 import os
 import aiosqlite
+import json
 from dotenv import load_dotenv
 from langchain.llms import OpenAI
 from langchain.prompts import (
@@ -34,6 +35,10 @@ from typing import List, Tuple
 import spacy
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
+import uuid
+import chromadb
+from chromadb.config import Settings
+from chromadb.utils import embedding_functions
 
 app = Flask(__name__)
 CORS(app)
@@ -220,8 +225,6 @@ async def upload_resume():
 
         return sections
 
-    user_id = request.form.get("id")
-
     async def save_resume_to_database(user_id: int, resume_sections: List[Tuple[str, str]]):
         db = await get_db()
         cursor = await db.cursor()
@@ -251,7 +254,11 @@ async def upload_resume():
         plain_text = extract_raw_text(resume_buffer)
         resume_sections = split_resume_into_sections(plain_text)
         await save_resume_to_database(user_id, resume_sections)
-        embeddings = OpenAIEmbeddings()
+
+        embeddings = embedding_functions.OpenAIEmbeddingFunction(
+                api_key=api_key,
+                model_name="text-embedding-ada-002"
+        )
         text_splitter = RecursiveCharacterTextSplitter(
             # Set a really small chunk size, just to show.
             chunk_size = 500,
@@ -259,9 +266,36 @@ async def upload_resume():
             length_function = len,
         )
         docs_chunked = text_splitter.create_documents([plain_text])
-        print(docs_chunked)
-        vec_db = Chroma.from_documents(documents=docs_chunked, embedding=embeddings, persist_directory=user_embeddings_directory)
-        vec_db.persist()
+        docs_text = [doc.page_content for doc in docs_chunked]
+        print(docs_text)
+
+        doc_ids = [str(uuid.uuid4()) for _ in docs_chunked]
+        metadatas = [{"type": "resume"} for _ in docs_chunked]
+
+        chroma_client = chromadb.Client(Settings(
+            chroma_db_impl="duckdb+parquet",
+            persist_directory=user_embeddings_directory
+        ))
+
+        collection_name = "langchain"
+
+        try:
+            chroma_collection = chroma_client.get_collection(name=collection_name, embedding_function=embeddings)
+
+            chroma_collection.delete(
+                where={"type": "resume"}
+            )
+
+        except:
+            chroma_collection = chroma_client.create_collection(name=collection_name, embedding_function=embeddings)
+       
+        chroma_collection.add(
+            documents=docs_text,
+            metadatas=metadatas,
+            ids=doc_ids
+        )
+
+        print(chroma_collection.peek())
         return jsonify(success=True, message="Resume uploaded and parsed successfully.")
     except Exception as e:
         print("Error parsing resume:", e)
@@ -293,22 +327,52 @@ async def gpt_api_call():
     form_values = request.json
     query = form_values["query"]
     user_id = form_values["id"]
+    request_type = form_values["type"]
     print(user_id)
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
 
-    embeddings = OpenAIEmbeddings()
+    embeddings = embedding_functions.OpenAIEmbeddingFunction(
+        api_key=api_key,
+        model_name="text-embedding-ada-002"
+    )
 
-    vec_db = Chroma(persist_directory=user_embeddings_directory, embedding_function=embeddings)
+    embeddings_langchain = OpenAIEmbeddings()
 
-    docs = vec_db.similarity_search_with_score(query)
+    chroma_client = chromadb.Client(Settings(
+        chroma_db_impl="duckdb+parquet",
+        persist_directory=user_embeddings_directory
+    ))
+
+    collection_name = "langchain"
+
+    try:
+        chroma_collection = chroma_client.get_collection(name=collection_name, embedding_function=embeddings)
+
+    except KeyError:
+        chroma_collection = chroma_client.create_collection(name=collection_name, embedding_function=embeddings)
+
+    print(chroma_collection.peek())
+
+    docs = chroma_collection.query(
+        query_texts=[query],
+        n_results=3
+    )
     print(docs)
+
+    vec_db = Chroma(persist_directory=user_embeddings_directory, embedding_function=embeddings_langchain)
 
     chat = ChatOpenAI(
         model_name="gpt-3.5-turbo",
         openai_api_key=api_key,
         temperature=0,
     )
+
+    template_help = """You are an intelligent resume bot and your job is to help users improve their resume, speak more effectively about their work experience, and provide career guidance. In this case, the user is trying to prepare answers to interview questions specific to their role.
+
+    Please answer the question from the user's perspective and limit your answer to one paragraph. Relevant information from the user's resume is provided below. In a paragraph below the answer, provide a recommendation on how they can improve the answer. Do not make anything up.
+
+    Relevant information: {context}"""
 
     template_string_ben = """Your name is Ben. You are being interviewed for a Solutions Consultant role at a tech company. You are arrogant and think you are the GOAT. You have a tendency to call people chumps.
 
@@ -322,10 +386,16 @@ async def gpt_api_call():
 
     Relevant information: {context}"""
 
+    if request_type == 'chat':
+        final_template = template_string_ben
+    else:
+        final_template = template_help
+
+
     resume_prompt = ChatPromptTemplate(
         input_variables=['context', 'question'],
         messages = [
-            SystemMessagePromptTemplate.from_template(template_string_ben),
+            SystemMessagePromptTemplate.from_template(final_template),
             # MessagesPlaceholder(variable_name="history"),
             HumanMessagePromptTemplate.from_template("{question}")
         ]
@@ -353,9 +423,9 @@ async def gpt_api_call():
 
         chains[chain_id] = chain
 
-        # Insert a new chat row
-        await db.execute("INSERT INTO chat (user_id, chat_id, chat_name) VALUES (?, ?, ?)", [user_id, chain_id, query])
-        await db.commit()
+        if request_type == 'chat':
+            await db.execute("INSERT INTO chat (user_id, chat_id, chat_name) VALUES (?, ?, ?)", [user_id, chain_id, query])
+            await db.commit()
     
     try:
         print(chain)
@@ -363,21 +433,271 @@ async def gpt_api_call():
         answer = result_endpoint
 
         # Insert user query and API response into the messages table
-        timestamp = datetime.now().isoformat()
-        await db.execute(
-        "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (?, ?, ?, ?, ?)",
-        ["user", user_id, chain_id, query, timestamp]
-        )
-        await db.execute(
+        if request_type == 'chat':
+            timestamp = datetime.now().isoformat()
+            await db.execute(
             "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (?, ?, ?, ?, ?)",
-            ["bot", user_id, chain_id, answer, timestamp]
-        )
-        await db.commit()
+            ["user", user_id, chain_id, query, timestamp]
+            )
+            await db.execute(
+                "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (?, ?, ?, ?, ?)",
+                ["bot", user_id, chain_id, answer, timestamp]
+            )
+            await db.commit()
 
         return jsonify(answer=answer, chainId=chain_id)
     except Exception as e:
         print(e)
         return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
+
+@app.route("/generate-interview-questions", methods=["POST"])
+async def generate_interview_questions():
+    db = await get_db()
+    form_values = request.json
+    print(form_values)
+    user_id = form_values["id"]
+
+    chat = ChatOpenAI(
+        model_name="gpt-3.5-turbo",
+        openai_api_key=api_key,
+        temperature=0,
+    )
+
+    db = await get_db()
+    cursor = await db.cursor()
+    await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
+    resume = await cursor.fetchall()
+
+    template_questions = """Below is a user's resume. Please return 5 interview questions this user might be asked during an interview based on their current job title in the following format: ['question1','question2','question3','question4','question5']
+
+    Resume: {context}"""
+
+    chain = LLMChain(
+        llm=chat,
+        prompt=PromptTemplate.from_template(template_questions)
+    )
+
+    chain_id = str(int(time.time()))  # Generate a unique identifier based on the current timestamp
+
+    try:
+        questions_response = chain(resume)
+        print(questions_response)
+        # Convert the questions string into a Python list
+        questions_string = questions_response['text'].replace("'", "\"")
+        questions_list = json.loads(questions_string)
+
+        # Save the questions to the interview_questions table
+        for question in questions_list:
+            await cursor.execute(
+                "INSERT INTO interview_questions (user_id, question) VALUES (?, ?)",
+                (user_id, question),
+            )
+
+        # Commit the changes to the database
+        await db.commit()
+
+        return jsonify(questions=questions_list, chainId=chain_id)
+    except Exception as e:
+        print(e)
+        return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
+
+@app.route("/get-interview-questions", methods=["POST"])
+async def get_interview_questions():
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+
+    cursor = await db.cursor()
+    await cursor.execute("SELECT * FROM interview_questions WHERE user_id = ?", (user_id,))
+    interview_questions = await cursor.fetchall()
+
+    questions = [
+        {
+            "id": question[0],
+            "user_id": question[1],
+            "question": question[2],
+            "answer": question[3],
+        }
+        for question in interview_questions
+    ]
+
+    return jsonify(questions=questions)
+
+@app.route("/delete-interview-question", methods=["POST"])
+async def delete_interview_question():
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    question_id = data["question_id"]
+
+    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
+    os.makedirs(user_embeddings_directory, exist_ok=True)
+
+    cursor = await db.cursor()
+    try:
+        embeddings = embedding_functions.OpenAIEmbeddingFunction(
+            api_key=api_key,
+            model_name="text-embedding-ada-002"
+        )
+
+        chroma_client = chromadb.Client(Settings(
+            chroma_db_impl="duckdb+parquet",
+            persist_directory=user_embeddings_directory
+        ))
+
+        collection_name = "langchain"
+
+        chroma_collection = chroma_client.get_collection(name=collection_name, embedding_function=embeddings)
+
+        chroma_collection.delete(
+            ids=[question_id]
+        )
+
+        await cursor.execute("DELETE FROM interview_questions WHERE id = ? AND user_id = ?", (question_id, user_id))
+        await db.commit()
+        return jsonify(success=True, message="Interview question deleted successfully")
+    except Exception as e:
+        print(e)
+        return jsonify(success=False, message="Error deleting the interview question")
+
+
+@app.route("/save-answer", methods=["POST"])
+async def save_answer():
+
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    question_id = data["question_id"]
+    question = data["question"]
+    answer = data["answer"]
+
+    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
+    os.makedirs(user_embeddings_directory, exist_ok=True)
+
+    try:
+        cursor = await db.cursor()
+        await cursor.execute(
+            "UPDATE interview_questions SET answer = ? WHERE id = ?",
+            (answer, question_id),
+        )
+        await db.commit()
+
+        embeddings = embedding_functions.OpenAIEmbeddingFunction(
+            api_key=api_key,
+            model_name="text-embedding-ada-002"
+        )
+
+        chroma_client = chromadb.Client(Settings(
+            chroma_db_impl="duckdb+parquet",
+            persist_directory=user_embeddings_directory
+        ))
+
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size = 5000,
+            chunk_overlap  = 20,
+            length_function = len,
+        )
+        docs_chunked = text_splitter.create_documents([f"Question: {question}, Answer: {answer}"])
+        docs_text = [doc.page_content for doc in docs_chunked]
+        doc_ids = [f"{question_id}"]
+
+        metadatas = [{"type": "question_answers"} for _ in docs_chunked]
+
+        chroma_client = chromadb.Client(Settings(
+            chroma_db_impl="duckdb+parquet",
+            persist_directory=user_embeddings_directory
+        ))
+
+        collection_name = "langchain"
+
+        try:
+            chroma_collection = chroma_client.get_collection(name=collection_name, embedding_function=embeddings)
+
+        except KeyError:
+            chroma_collection = chroma_client.create_collection(name=collection_name, embedding_function=embeddings)
+
+        chroma_collection.add(
+            documents=docs_text,
+            metadatas=metadatas,
+            ids=doc_ids
+        )
+
+        print(chroma_collection.get(
+            where={"type": "question_answers"}
+        ))
+
+        return jsonify(success=True)
+    except Exception as e:
+        print(e)
+        return jsonify(success=False, message="Error updating answer"), 500
+    
+@app.route("/edit-answer", methods=["POST"])
+async def edit_answer():
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    question_id = data["question_id"]
+    question = data["question"]
+    answer = data["answer"]
+
+    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
+    os.makedirs(user_embeddings_directory, exist_ok=True)
+
+    try:
+        cursor = await db.cursor()
+        await cursor.execute(
+            "UPDATE interview_questions SET answer = ? WHERE id = ?",
+            (answer, question_id),
+        )
+        await db.commit()
+
+        embeddings = embedding_functions.OpenAIEmbeddingFunction(
+            api_key=api_key,
+            model_name="text-embedding-ada-002"
+        )
+        
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=5000,
+            chunk_overlap=20,
+            length_function=len,
+        )
+        docs_chunked = text_splitter.create_documents([f"Question: {question}, Answer: {answer}"])
+        docs_text = [doc.page_content for doc in docs_chunked]
+
+        doc_ids = [f"{question_id}"]
+
+        chroma_client = chromadb.Client(Settings(
+            chroma_db_impl="duckdb+parquet",
+            persist_directory=user_embeddings_directory
+        ))
+
+        collection_name = "langchain"
+
+        try:
+            chroma_collection = chroma_client.get_collection(name=collection_name, embedding_function=embeddings)
+            print(chroma_collection)
+
+        except KeyError:
+            chroma_collection = chroma_client.create_collection(name=collection_name, embedding_function=embeddings)
+
+
+        chroma_collection.update(
+            documents=docs_text,
+            ids=doc_ids
+        )
+
+        print(chroma_collection.get(
+            where={"type": "resume"}
+        ))
+
+        # vec_db = Chroma.from_documents(documents=docs_chunked, embedding=embeddings, persist_directory=user_embeddings_directory)
+        # vec_db.persist()
+
+        return jsonify(success=True)
+    except Exception as e:
+        print(e)
+        return jsonify(success=False, message="Error updating answer"), 500
+
 
 @app.route("/get-database-tables", methods=["GET"])
 async def get_database_tables():
@@ -405,17 +725,17 @@ async def get_table_data_route(table_name):
         print(f"Error fetching data for table {table_name}:", e)
         return jsonify(error="An error occurred while fetching table data."), 500
     
-@app.route("/delete-row/<string:table_name>", methods=["DELETE"])
-async def delete_row_route(table_name):
+@app.route("/delete-row/<string:table_name>/<int:row_id>", methods=["DELETE"])
+async def delete_row_route(table_name, row_id):
     user_id = request.args.get("user_id")
-    row_id = request.args.get("row_id")
     
     try:
-        await delete_row(table_name, user_id, row_id)
-        return jsonify(success=True)
+        deleted_rows = await delete_row(table_name, user_id, row_id)
+        return jsonify(deleted_rows=deleted_rows)
     except Exception as e:
-        print(f"Error deleting row with id {row_id}:", e)
+        print(f"Error deleting row {row_id} from table {table_name}:", e)
         return jsonify(error="An error occurred while deleting the row."), 500
+
     
 
 @app.route("/get-messages", methods=["GET"])

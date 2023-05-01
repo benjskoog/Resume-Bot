@@ -9,16 +9,18 @@ function TableView() {
   const { tableName } = useParams();
   const { user } = useContext(UserContext);
 
-  const deleteRow = async (rowId) => {
-    try {
-      await axios.delete(`http://localhost:3001/delete-row/${tableName}`, {
-        params: { user_id: user.id, row_id: rowId },
-      });
-      setTableData((prevTableData) => prevTableData.filter((row) => row.id !== rowId));
-    } catch (error) {
-      console.error(`Error deleting row with id ${rowId}:`, error);
-    }
-  };
+async function deleteRow(rowId) {
+  try {
+    const response = await axios.delete(
+      `http://localhost:3001/delete-row/${tableName}/${rowId}`,
+      { params: { user_id: user.id } }
+    );
+    setTableData((prevTableData) => prevTableData.filter((row) => row.id !== rowId));
+    console.log("Deleted rows:", response.data.deleted_rows);
+  } catch (error) {
+    console.error(`Error deleting row ${rowId} from table ${tableName}:`, error);
+  }
+}
 
 
   useEffect(() => {

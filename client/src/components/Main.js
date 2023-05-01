@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Route, Routes, useLocation, Link, Navigate } f
 import UserContext from './UserContext';
 import BottomInput from './BottomInput';
 import DataSources from './DataSources';
+import InterviewQuestionsForm from './InterviewQuestionsForm';
 import TableView from './TableView';
 import Chat from './Chat';
 import NavBar from './NavBar';
@@ -69,6 +70,7 @@ const Main = React.forwardRef((props, ref) => {
               <Route path="/chat" element={<Chat ref={chatRef} />} />
               <Route path="/chat/:chatId" element={<Chat ref={chatRef} />} />
               <Route path="/datasources" element={<DataSources />} />
+              <Route path="/interview-questions-form" element={<InterviewQuestionsForm />} />
               <Route path="/datasources/:tableName" element={<TableView />} />
               <Route path="/register" element={<Register />} />
               <Route path="/login" element={<Login />} />

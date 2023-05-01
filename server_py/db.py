@@ -15,7 +15,8 @@ async def setup_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
                 chat_id TEXT,
-                chat_name TEXT
+                chat_name TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id)
             );
 
             CREATE TABLE IF NOT EXISTS messages (
@@ -25,6 +26,7 @@ async def setup_db():
                 chat_id TEXT,
                 message TEXT,
                 timestamp TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id),
                 FOREIGN KEY (chat_id) REFERENCES chat(chat_id) ON DELETE CASCADE
             );
             
@@ -32,13 +34,23 @@ async def setup_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
                 section TEXT,
-                content TEXT
+                content TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            );
+            
+            CREATE TABLE IF NOT EXISTS interview_questions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                question TEXT,
+                answer TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id)
             );
 
             CREATE TABLE IF NOT EXISTS linkedIn (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
-                content TEXT
+                content TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id)
             );
 
             CREATE TABLE IF NOT EXISTS users (
@@ -86,13 +98,26 @@ async def get_table_data(table_name, user_id):
     
 async def delete_row(table_name, user_id, row_id):
     async with aiosqlite.connect(db_path) as db:
-        # Make sure to properly sanitize user input and handle possible errors
+        # If we're deleting a chat, delete the related messages first
+        if table_name == "chat":
+            cursor = await db.execute("SELECT chat_id FROM chat WHERE id = ? AND user_id = ?", (row_id, user_id))
+            chat_id = await cursor.fetchone()
+            if chat_id:
+                await db.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id[0],))
+                await db.commit()
+
+        # Delete the row from the specified table
         await db.execute(
             f"DELETE FROM {table_name} WHERE id = ? AND user_id = ?",
             (row_id, user_id),
         )
         await db.commit()
 
+        # Check if the row was deleted successfully
+        cursor = await db.execute(f"SELECT COUNT(*) FROM {table_name} WHERE id = ? AND user_id = ?", (row_id, user_id))
+        count = await cursor.fetchone()
+
+        return count[0] == 0
 
 # Initialize the database when the module is loaded
 asyncio.run(setup_db())

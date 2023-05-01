@@ -42,7 +42,8 @@ const Chat = React.forwardRef((props, ref) => {
     const data = {
       id: user.id,
       query: formValues.query,
-      chainId: chatId
+      chainId: chat || chatId,
+      type: "chat"
     };
     console.log(data)
 
@@ -78,6 +79,7 @@ const Chat = React.forwardRef((props, ref) => {
     console.log(chatId)
     if (chatId) {
       fetchMessagesByChatId(chatId);
+      setChat(chatId);
     }
   }, [chatId]);
 
@@ -91,7 +93,7 @@ const Chat = React.forwardRef((props, ref) => {
       />
       <BottomInput onSubmit={handleFormSubmit}/>
     </div>
-    {user && <ChatHistory userId={user.id} onSubmit={handleFormSubmit} />}
+    {user && <ChatHistory userId={user.id} onSubmit={handleFormSubmit} clearChatState={clearChatState} />}
     </div>
     </>
   );

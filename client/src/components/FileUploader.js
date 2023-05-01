@@ -104,6 +104,7 @@ const FileUploader = ({ setIsModalOpen, closeModal }) => {
       });
       if (response.data.success) {
         alert("Resume uploaded successfully.");
+        setIsModalOpen(false)
       } else {
         alert("Error uploading resume.");
       }

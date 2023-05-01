@@ -24,7 +24,7 @@ function Register() {
         passwordConfirmation,
       });
       console.log(response.data);
-      setUser({ id: response.data.id, email, first_name, last_name });
+      setUser({ id: response.data.id, email, first_name, last_name, password });
       setLoggedIn(true);
       // Save the JWT token to localStorage and update the user context
     } catch (error) {

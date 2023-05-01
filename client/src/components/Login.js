@@ -24,7 +24,7 @@ function Login() {
 
       // Update the user context
       console.log('Calling setUser with email:', email);
-      setUser({ id: response.data.id, email, first_name: response.data.first_name, last_name: response.data.last_name });
+      setUser({ id: response.data.id, email, first_name: response.data.first_name, last_name: response.data.last_name, password });
 
       // Set loggedIn state to true for redirection
       setLoggedIn(true);
@@ -70,7 +70,7 @@ function Login() {
         <div className="flex items-center justify-between">
           <label for="password" className="block text-sm font-medium leading-6 text-gray-900">Password</label>
           <div className="text-sm">
-            <a href="#" className="font-semibold text-blue-700 hover:text-indigo-400">Forgot password?</a>
+            <a href="/forgot-password" className="font-semibold text-blue-700 hover:text-indigo-400">Forgot password?</a>
           </div>
         </div>
         <div className="mt-2">

@@ -9,6 +9,7 @@ function QuestionModal({ question, closeModal, setIsModalOpen, submit }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true); // Set loading to true before making the request
 
     try {
       const route = question.answer ? '/edit-answer' : '/save-answer';
@@ -18,6 +19,8 @@ function QuestionModal({ question, closeModal, setIsModalOpen, submit }) {
       setIsModalOpen(false);
     } catch (error) {
       console.error('Error submitting answer:', error);
+    } finally {
+        setLoading(false);
     }
   };
   

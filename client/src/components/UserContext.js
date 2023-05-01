@@ -26,6 +26,12 @@ export const UserProvider = ({ children, resetStates }) => {
     }
   };
 
+  const updateUserPassword = (password) => {
+    const updatedUser = { ...user, password: password };
+    setUser(updatedUser);
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+  };  
+
   const logout = () => {
     setUser(null);
     resetStates();
@@ -33,7 +39,7 @@ export const UserProvider = ({ children, resetStates }) => {
   };
 
   return (
-    <UserContext.Provider value={{ user, setUser: updateUser, loading, logout }}>
+    <UserContext.Provider value={{ user, setUser: updateUser, loading, logout, updateUserPassword }}>
       {children}
     </UserContext.Provider>
   );

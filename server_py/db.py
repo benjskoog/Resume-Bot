@@ -61,6 +61,14 @@ async def setup_db():
                 password TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                token TEXT,
+                expires_at TEXT, 
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            );
+
             """
         )
         

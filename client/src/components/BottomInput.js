@@ -4,7 +4,8 @@ import { Link } from "react-router-dom";
 const ButtomInput = ({ onSubmit }) => {
   const [query, setQuery] = useState("");
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     if (query.trim() !== "") {
       onSubmit({ query });
       setQuery("");
@@ -14,7 +15,7 @@ const ButtomInput = ({ onSubmit }) => {
   const handleKeyDown = async (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      handleSubmit();
+      handleSubmit(event);
     }
   };
 

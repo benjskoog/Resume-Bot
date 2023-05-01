@@ -3,6 +3,7 @@ from flask_cors import CORS
 import os
 import aiosqlite
 import json
+import secrets
 from dotenv import load_dotenv
 from langchain.llms import OpenAI
 from langchain.prompts import (
@@ -39,6 +40,7 @@ import uuid
 import chromadb
 from chromadb.config import Settings
 from chromadb.utils import embedding_functions
+from email_sending import send_email
 
 app = Flask(__name__)
 CORS(app)
@@ -170,6 +172,99 @@ async def login():
     access_token = create_access_token(identity=user[3])
 
     return jsonify({"access_token": access_token, "id": user[0], "email": user[3], "first_name": user[1], "last_name": user[2]}), 200
+
+@app.route("/forgot-password", methods=["POST"])
+async def forgot_password():
+    data = request.get_json()
+    email = data.get("email")
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    db = await get_db()
+    cursor = await db.cursor()
+    await cursor.execute("SELECT * FROM users WHERE email=?", (email,))
+    user = await cursor.fetchone()
+
+    if not user:
+        return jsonify({"error": "No user found with the provided email"}), 404
+
+    # Generate a password reset token
+    reset_token = secrets.token_hex(16)
+
+    # Save the token in the database with an expiration time
+    await cursor.execute("INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+1 hour'))", (user[0], reset_token))
+    await db.commit()
+
+    # Send the password reset email
+    reset_link = f"http://localhost:3000/reset-password?token={reset_token}"
+    email_subject = "Password Reset Request"
+    email_body = f"Please click the following link to reset your password: {reset_link}"
+    
+    send_email(email_subject, email_body, email)  # Customize this according to your email sending function
+
+    return jsonify({"message": "A password reset link has been sent to your email address"}), 200
+
+@app.route("/reset-password", methods=["POST"])
+async def reset_password():
+    data = request.get_json()
+    token = data.get("token")
+    new_password = data.get("password")
+    print(token)
+    print(new_password)
+
+    if not token or not new_password:
+        return jsonify({"error": "Token and new password are required"}), 400
+
+    db = await get_db()
+    cursor = await db.cursor()
+
+    # Find the password reset token in the database
+    await cursor.execute("SELECT * FROM password_reset_tokens WHERE token=? AND expires_at > datetime('now')", (token,))
+    token_entry = await cursor.fetchone()
+
+    if not token_entry:
+        return jsonify({"error": "Invalid or expired token"}), 400
+
+    # Update the user's password
+    hashed_password = generate_password_hash(new_password, method="sha256")
+    await cursor.execute("UPDATE users SET password=? WHERE id=?", (hashed_password, token_entry[1]))
+    await db.commit()
+
+    # Delete the used password reset token
+    await cursor.execute("DELETE FROM password_reset_tokens WHERE token=?", (token,))
+    await db.commit()
+
+    return jsonify({"message": "Password has been successfully reset"}), 200
+
+
+@app.route("/update-password", methods=["PUT"])
+async def update_password():
+    data = request.get_json()
+    email = data.get("email")
+    new_password = data.get("newPassword")
+
+    if not email or not new_password:
+        return jsonify({"type" : "error", "message": "Email and new password are required"}), 400
+
+    db = await get_db()
+    cursor = await db.cursor()
+
+    # Find the user by email
+    await cursor.execute("SELECT * FROM users WHERE email=?", (email,))
+    user = await cursor.fetchone()
+
+    if not user:
+        return jsonify({"type" : "error", "message": "User not found"}), 404
+
+    # Update the user's password
+    hashed_password = generate_password_hash(new_password, method="sha256")
+    await cursor.execute("UPDATE users SET password=? WHERE id=?", (hashed_password, user[0]))
+    await db.commit()
+
+    return jsonify({"type": "success", "message": "Password has been successfully updated"}), 200
+
+
 
 @app.route("/profile", methods=["GET"])
 @jwt_required()

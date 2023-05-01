@@ -10,6 +10,9 @@ import NavBar from './NavBar';
 import Register from './Register';
 import Login from './Login';
 import TopBar from './TopBar';
+import UserSettings from './UserSettings';
+import ForgotPassword from './ForgotPassword';
+import ResetPassword from "./ResetPassword";
 import axios from "axios";
 
 const Main = React.forwardRef((props, ref) => {
@@ -22,7 +25,7 @@ const Main = React.forwardRef((props, ref) => {
   const clearMainState = () => {
     setResume({});
     setLinkedIn({});
-    chatRef.current.clearChatState();
+    chatRef.current && chatRef.current.clearChatState()
   };
 
   useImperativeHandle(ref, () => ({
@@ -54,7 +57,7 @@ const Main = React.forwardRef((props, ref) => {
     return null; // or render a loading indicator
   }
 
-  if (!user && location.pathname !== '/login' && location.pathname !== '/register') {
+  if (!user && location.pathname !== '/login' && location.pathname !== '/register' && location.pathname !== '/forgot-password' && location.pathname !== '/reset-password') {
     return <Navigate to="/login" />;
   }
 
@@ -74,6 +77,10 @@ const Main = React.forwardRef((props, ref) => {
               <Route path="/datasources/:tableName" element={<TableView />} />
               <Route path="/register" element={<Register />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/reset-password/:token" element={<ResetPassword />} />
+              <Route path="/user-settings" element={<UserSettings />} />
             </Routes>
         </div>
       </div>

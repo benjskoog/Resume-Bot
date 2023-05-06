@@ -1,3 +1,10 @@
 @import 'tailwindcss/base';
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
+
+.truncate-5-lines {
+    display: -webkit-box;
+    -webkit-line-clamp: 5; /* Number of lines you want to display */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }

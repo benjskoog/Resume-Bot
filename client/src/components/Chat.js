@@ -41,6 +41,7 @@ const Chat = React.forwardRef((props, ref) => {
     const proxyEndpoint = "http://localhost:3001/gpt-api-call";
     const data = {
       id: user.id,
+      first_name: user.first_name,
       query: formValues.query,
       chainId: chat || chatId,
       type: "chat"

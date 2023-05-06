@@ -41,9 +41,33 @@ async def setup_db():
             CREATE TABLE IF NOT EXISTS interview_questions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
+                job_app_id INTEGER,
                 question TEXT,
                 answer TEXT,
+                recommendation TEXT,
                 FOREIGN KEY (user_id) REFERENCES users (id)
+            );
+
+            CREATE TABLE IF NOT EXISTS job_applications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                job_title TEXT,
+                company_name TEXT,
+                job_description TEXT,
+                status TEXT,
+                post_url TEXT,
+                date_created DATETIME,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            );
+
+            CREATE TABLE IF NOT EXISTS job_app_sections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                job_app_id INTEGER,
+                section TEXT,
+                content TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id),
+                FOREIGN KEY (job_app_id) REFERENCES job_applications (id)
             );
 
             CREATE TABLE IF NOT EXISTS linkedIn (

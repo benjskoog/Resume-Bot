@@ -38,7 +38,7 @@ function DataSources({ onBack }) {
   }, []);
 
   return (
-    <div className="overflow-y-auto bg-gray-100 h-[calc(100vh-72px)] max-w-full">
+    <div className="overflow-y-auto bg-gray-200 h-[calc(100vh-72px)] max-w-full">
       <div className="pt-8 px-8">
         <button
           className="bg-gray-900 text-white active:bg-slate-600 uppercase text-5xl leading-none w-10 h-10 p-0 rounded-full shadow-lg hover:shadow-md outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 flex items-center justify-center relative"

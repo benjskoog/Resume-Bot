@@ -13,7 +13,9 @@ import TopBar from './TopBar';
 import UserSettings from './UserSettings';
 import ForgotPassword from './ForgotPassword';
 import ResetPassword from "./ResetPassword";
+import JobApplications from "./JobApplications";
 import axios from "axios";
+import JobApplicationsForm from "./JobApplicationsForm";
 
 const Main = React.forwardRef((props, ref) => {
   const location = useLocation();
@@ -73,6 +75,8 @@ const Main = React.forwardRef((props, ref) => {
               <Route path="/chat" element={<Chat ref={chatRef} />} />
               <Route path="/chat/:chatId" element={<Chat ref={chatRef} />} />
               <Route path="/datasources" element={<DataSources />} />
+              <Route path="/job-applications" element={<JobApplications />} />
+              <Route path="/job-application-form" element={<JobApplicationsForm />} />
               <Route path="/interview-questions-form" element={<InterviewQuestionsForm />} />
               <Route path="/datasources/:tableName" element={<TableView />} />
               <Route path="/register" element={<Register />} />

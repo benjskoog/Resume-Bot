@@ -1,15 +1,16 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import axios from 'axios';
 import UserContext from './UserContext';
 
 function QuestionModal({ question, closeModal, setIsModalOpen, submit }) {
   const [answer, setAnswer] = useState(question.answer || '');
-  const [loading, setLoading] = useState(false); // Add loading state
+  const [recommendation, setRecommendation] = useState(question.recommendation || '');
+  const [loading, setLoading] = useState(false);
   const { user, setUser, logout } = useContext(UserContext);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true); // Set loading to true before making the request
+    setLoading(true);
 
     try {
       const route = question.answer ? '/edit-answer' : '/save-answer';
@@ -26,23 +27,34 @@ function QuestionModal({ question, closeModal, setIsModalOpen, submit }) {
   
 
   const getAnswerHelp = async () => {
-    const proxyEndpoint = "http://localhost:3001/gpt-api-call";
+    const proxyEndpoint = "http://localhost:3001/get-answer-help";
     const data = {
       id: user.id,
+      question_id: question.id,
+      question_answer: question.answer,
       query: question.question,
+      job_app_id: question.job_app_id,
       type: "help"
     };
 
     setLoading(true); // Set loading to true before making the request
     try {
       const response = await axios.post(proxyEndpoint, data);
+      console.log(response.data)
       const result = response.data.answer;
       setAnswer(result);
+      setRecommendation(response.data.recommendation)
     } catch (error) {
       console.error('Error getting answer help:', error);
     }
     setLoading(false); // Set loading to false after the request has completed
   };
+
+  useEffect(() => {
+    if (question.recommendation) {
+      setRecommendation(question.recommendation);
+    }
+  }, [question.recommendation]);
 
   return (
     <div
@@ -56,13 +68,10 @@ function QuestionModal({ question, closeModal, setIsModalOpen, submit }) {
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
         ></textarea>
+        <p className="mt-2 text-sm text-gray-600">{recommendation}</p>
         {loading && (
             <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-50">
-              <img
-                className="h-8 w-8"
-                src="https://icons8.com/preloaders/preloaders/1488/Iphone-spinner-2.gif"
-                alt="Loading"
-              />
+              <div class="w-12 h-12 mt-4 rounded-full animate-spin border-y-2 border-solid border-gray-900 border-t-transparent"></div>
             </div>
           )}
         <div className="flex justify-between mt-4">

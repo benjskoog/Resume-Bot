@@ -17,7 +17,7 @@ const Messages = ({ messages, fetchingResponse }) => {
                 </div>
               </div>
           
-                  <p>{`Hi, I am ${user.first_name}'s resume bot. Ask me questions about my career!`}</p>
+                  <p>{`Hi ${user.first_name}! I am your personal career assistant. Ask me how to improve your resume or prepare for your next interview!`}</p>
 
         </div>
       </div>
@@ -25,7 +25,7 @@ const Messages = ({ messages, fetchingResponse }) => {
         messages.map((message, index) => (
           <div
             key={index}
-            className={`group w-full text-gray-800 dark:text-gray-100 border-b border-black/10 dark:border-gray-900/50 dark:bg-[#444654] ${
+            className={`group w-full whitespace-pre-wrap text-gray-800 dark:text-gray-100 border-b border-black/10 dark:border-gray-900/50 dark:bg-[#444654] ${
               message.type === 'user' ? 'bg-blue-100' : 'bg-orange-200'
             }`}
           >
@@ -54,11 +54,7 @@ const Messages = ({ messages, fetchingResponse }) => {
         <div className="loader-container">
         <div className="bg-white p-8">
           <div className="flex justify-center items-center h-full">
-            <img
-              className="h-8 w-8"
-              src="https://icons8.com/preloaders/preloaders/1488/Iphone-spinner-2.gif"
-              alt=""
-            ></img>
+            <div class="w-12 h-12 mt-4 rounded-full animate-spin border-y-2 border-solid border-gray-900 border-t-transparent"></div>
           </div>
         </div>
       </div>

@@ -44,7 +44,6 @@ const Chat = React.forwardRef((props, ref) => {
       first_name: user.first_name,
       query: formValues.query,
       chainId: chat || chatId,
-      type: "chat"
     };
     console.log(data)
 

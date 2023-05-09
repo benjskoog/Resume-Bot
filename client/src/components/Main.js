@@ -16,6 +16,7 @@ import ResetPassword from "./ResetPassword";
 import JobApplications from "./JobApplications";
 import axios from "axios";
 import JobApplicationsForm from "./JobApplicationsForm";
+import ResumeOptimizer from "./ResumeOptimizer";
 
 const Main = React.forwardRef((props, ref) => {
   const location = useLocation();
@@ -66,7 +67,7 @@ const Main = React.forwardRef((props, ref) => {
   return (
     <>
       <div className="overflow w-full h-full relative flex">
-      {user && <NavBar onNewChatClick={() => chatRef.current && chatRef.current.clearChatState()} />}
+      {user && <NavBar selectedItem={location.pathname} onNewChatClick={() => chatRef.current && chatRef.current.clearChatState()} />}
         <div class="flex-1 flex-col">
           <TopBar path={location.pathname}/>
 
@@ -77,6 +78,7 @@ const Main = React.forwardRef((props, ref) => {
               <Route path="/datasources" element={<DataSources />} />
               <Route path="/job-applications" element={<JobApplications />} />
               <Route path="/job-application-form" element={<JobApplicationsForm />} />
+              <Route path="/resume-optimizer" element={<ResumeOptimizer />} />
               <Route path="/interview-questions-form" element={<InterviewQuestionsForm />} />
               <Route path="/datasources/:tableName" element={<TableView />} />
               <Route path="/register" element={<Register />} />

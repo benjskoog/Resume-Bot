@@ -1,109 +1,89 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useLocation, useNavigate  } from 'react-router-dom';
-import JobApplicationsForm from './JobApplicationsForm';
+import ResumeVersionForm from './ResumeVersionForm';
 import UserContext from './UserContext';
 import axios from 'axios';
 
-const JobApplications = () => {
-  const [applications, setApplications] = useState([]);
-  const [selectedApp, setSelectedApp] = useState(null);
+const ResumeOptimizer = () => {
+  const [resumes, setResumes] = useState([]);
+  const [selectedResume, setSelectedResume] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [jobApplications, setJobApplications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(4); // Change this to your desired number of items per page
   const { user, setUser, logout } = useContext(UserContext);
   const navigate = useNavigate();
 
-  const handleSave = async (updatedApp) => {
+  const handleSave = async (updatedResume) => {
     setLoading(true);
     try {
-      if (selectedApp === null) {
-        // Create a new job application
-        const response = await axios.post('http://localhost:3001/create-job-application', {
+      let newVersion;
+      if (selectedResume === null) {
+        // Create a new job resume
+        const response = await axios.post('http://localhost:3001/create-resume-version', {
           user_id: user.id,
-          job_title: updatedApp.job_title,
-          company_name: updatedApp.company_name,
-          job_description: updatedApp.job_description,
-          status: updatedApp.status,
-          post_url: updatedApp.post_url
+          job_app_id: updatedResume.job_app_id,
+          version_name: updatedResume.version_name,
         });
   
-        const newApp = response.data;
-        setApplications([...applications, newApp]);
+        newVersion = response.data;
       } else {
-        // Edit an existing job application
-        const response = await axios.put(`http://localhost:3001/edit-job-application/${applications[selectedApp].id}`, {
-          user_id: user.id,
-          job_title: updatedApp.job_title,
-          company_name: updatedApp.company_name,
-          job_description: updatedApp.job_description,
-          status: updatedApp.status,
-          post_url: updatedApp.post_url
+        // Edit an existing job resume
+        const response = await axios.put(`http://localhost:3001/edit-resume-version/${resumes[selectedResume].id}`, {
+            user_id: user.id,
+            job_app_id: updatedResume.job_app_id,
+            version_name: updatedResume.version_name,
         });
   
         // Use the spread operator to create a new object with the updated properties
-        const editedApp = {
-          ...applications[selectedApp],
-          job_title: updatedApp.job_title,
-          company_name: updatedApp.company_name,
-          job_description: updatedApp.job_description,
-          status: updatedApp.status,
-          post_url: updatedApp.post_url
+        newVersion = {
+          ...resumes[selectedResume],
+          job_app_id: updatedResume.job_app_id,
+          version_name: updatedResume.version_name,
         };
-  
-        setApplications(
-          applications.map((app, index) =>
-            index === selectedApp ? editedApp : app
-          )
-        );
       }
-      setSelectedApp(null);
+  
+      setResumes((prevResumes) => {
+        if (selectedResume === null) {
+          return [...prevResumes, newVersion];
+        } else {
+          return prevResumes.map((version, index) => (index === selectedResume ? newVersion : version));
+        }
+      });
+  
+      setSelectedResume(null);
       setShowForm(false);
       setLoading(false);
     } catch (error) {
-      console.error('Error saving job application:', error);
+      console.error('Error saving job resume:', error);
     }
-  };
+  };  
 
   const handleDelete = async (index) => {
     try {
-      const response = await axios.delete(`http://localhost:3001/delete-job-application/${applications[index].id}`);
+      const response = await axios.delete(`http://localhost:3001/delete-resume-version/${resumes[index].id}`);
   
       if (response.data.success) {
-        setApplications(applications.filter((_, i) => i !== index));
+        setResumes(resumes.filter((_, i) => i !== index));
       } else {
-        console.error("Error deleting job application");
+        console.error("Error deleting job resume");
       }
     } catch (error) {
-      console.error("Error deleting job application:", error);
+      console.error("Error deleting job resume:", error);
     }
   };
   
 
   const handleEdit = (index) => {
-    setSelectedApp(index);
+    setSelectedResume(index);
     setShowForm(true);
 
   };
 
-  const handleNewApp = () => {
+  const handleNewVersion = () => {
     setShowForm(true);
-    setSelectedApp(null);
-  };
-
-  const statusClass = (status) => {
-    switch (status.toLowerCase()) {
-      case "not started":
-        return "red";
-      case "in progress":
-        return "yellow";
-      case "rejected":
-        return "red";
-      case "complete":
-        return "green";
-      default:
-        return "gray";
-    }
+    setSelectedResume(null);
   };
 
   const handlePrevPage = () => {
@@ -116,28 +96,45 @@ const JobApplications = () => {
     setCurrentPage(currentPage + 1);
   };
   
-  
 
   useEffect(() => {
     setLoading(true);
-    const fetchApplications = async () => {
+    const fetchResumes = async () => {
       try {
-        const response = await axios.post('http://localhost:3001/get-job-applications', {
+        const response = await axios.post('http://localhost:3001/get-resume-versions', {
           user_id: user.id,
-          page: currentPage,
-          itemsPerPage: itemsPerPage,
+          job_app_id: null
         });
         const data = response.data;
         console.log(data);
-        setApplications(data.applications);
+        setResumes(data.versions);
         setLoading(false);
-        console.log(applications)
+        console.log(resumes)
       } catch (error) {
-        console.error('Error fetching job applications:', error);
+        console.error('Error fetching job resumes:', error);
       }
-    };    
+    };
   
-    fetchApplications();
+    fetchResumes();
+  }, [currentPage]);
+
+  useEffect(() => {
+    async function fetchJobApplications() {
+            try {
+              const response = await axios.post('http://localhost:3001/get-job-applications', {
+                user_id: user.id,
+                page: currentPage,
+                itemsPerPage: itemsPerPage,
+              });
+              const data = response.data;
+              console.log(data);
+              setJobApplications(data.applications);
+              console.log(jobApplications)
+            } catch (error) {
+              console.error('Error fetching job applications:', error);
+            }  
+    }
+    fetchJobApplications();
   }, [currentPage]);
 
   useEffect(() => {
@@ -155,16 +152,17 @@ const JobApplications = () => {
     };
   }, []);
 
-  const newApplication = { job_title: '', company_name: '', job_description: '', post_url: ''};
-  const currentApp = selectedApp === null ? newApplication : applications[selectedApp];
-  const appExists = selectedApp === null ? null : applications[selectedApp];
+  const newResume = { job_app_id: '', company_name: '', version_name: ''};
+  const currentVersion = selectedResume === null ? newResume : resumes[selectedResume];
+  const versionExists = selectedResume === null ? null : resumes[selectedResume];
 
   return (
     <>
       {showForm ? (
-        <JobApplicationsForm
-          appExists={appExists}
-          currentApp={currentApp}
+        <ResumeVersionForm
+          versionExists={versionExists}
+          jobApplications={jobApplications}
+          currentVersion={currentVersion}
           handleSave={handleSave}
           showForm={setShowForm}
         />
@@ -173,15 +171,15 @@ const JobApplications = () => {
     <div className="container mx-auto px-4 sm:px-8">
         <div className="py-8">
             <div>
-                <h2 className="text-2xl font-semibold leading-tight">Track your job applications</h2>
+                <h2 className="text-2xl font-semibold leading-tight">Optimize your resume for each job application!</h2>
             </div>
             <button
-                onClick={handleNewApp}
+                onClick={handleNewVersion}
                 type="button"
                 className="mb-4 mt-8 flex-shrink-0 inline-block rounded bg-blue-500 px-8 pb-2.5 pt-2.5 text-xs font-medium uppercase leading-normal text-white shadow-[0_4px_9px_-4px_#3b71ca] transition duration-150 ease-in-out hover:bg-primary-600 hover:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] focus:bg-primary-600 focus:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] focus:outline-none focus:ring-0 active:bg-primary-700 active:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] dark:shadow-[0_4px_9px_-4px_rgba(59,113,202,0.5)] dark:hover:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)] dark:focus:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)] dark:active:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)]"
                 data-te-ripple-init
                 data-te-ripple-color="light">
-                New Application
+                New Resume Version
             </button>
             <div className="-mx-4 sm:-mx-8 px-4 sm:px-8 py-4 overflow-x-auto">
               <div className="inline-block min-w-full shadow rounded-lg overflow-hidden">
@@ -196,7 +194,7 @@ const JobApplications = () => {
                     <tr>
                       <th
                         className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Job Title/Role
+                        Job Title
                       </th>
                       <th
                         className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -204,11 +202,7 @@ const JobApplications = () => {
                       </th>
                       <th
                         className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Job Description
-                      </th>
-                      <th
-                        className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Status
+                        Version Name
                       </th>
                       <th
                         className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -221,39 +215,31 @@ const JobApplications = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {applications.map((application, index) => (
-                      <tr key={application.id}>
+                    {resumes.map((resume, index) => (
+                      <tr key={resume.id}>
                         <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                         <button
                             className="text-left text-blue-600 hover:text-blue-800 focus:outline-none"
                             onClick={() => handleEdit(index)}
                         >
-                            <p className="text-gray-900 text-blue-900 whitespace-no-wrap">
-                            {application.job_title}
+                            <p className="text-blue-900 whitespace-no-wrap">
+                            {resume.job_title}
                             </p>
                         </button>
                         </td>
                         <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                           <p className="text-gray-900 whitespace-no-wrap">
-                            {application.company_name}
+                            {resume.company_name}
                           </p>
                         </td>
-                        <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
-                          <p className="text-gray-900 truncate-5-lines max-w-xl">
-                            {application.job_description}
-                          </p>
-                        </td>
-                        <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
-                                    <span
-                                        className={`relative inline-block px-3 py-1 font-semibold text-${application.status && statusClass(application.status)}-900 leading-tight`}>
-                                        <span aria-hidden
-                                            className={`absolute inset-0 opacity-50 bg-${application.status && statusClass(application.status)}-200 rounded-full`}></span>
-                                        <span className="relative whitespace-nowrap">{application.status}</span>
-                                    </span>
-                                </td>
                         <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                           <p className="text-gray-900 whitespace-no-wrap">
-                            {application.date_added}
+                            {resume.version_name}
+                          </p>
+                        </td>
+                        <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                          <p className="text-gray-900 whitespace-no-wrap">
+                            {resume.date_added}
                           </p>
                         </td>
                         <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
@@ -281,7 +267,7 @@ const JobApplications = () => {
                     ))}
                   </tbody>
                 </table>
-                    <div
+                <div
                         className="px-5 py-5 bg-white border-t flex flex-col xs:flex-row items-center xs:justify-between          ">
                         <span className="text-xs xs:text-sm text-gray-900">
                             Showing 1 to 4 of 50 Entries
@@ -303,7 +289,7 @@ const JobApplications = () => {
                     </div>
                 </div>
             </div>
-          </div>
+            </div>
         </div>
     </div>
 </div>
@@ -312,4 +298,4 @@ const JobApplications = () => {
   );
 };
 
-export default JobApplications;
+export default ResumeOptimizer;

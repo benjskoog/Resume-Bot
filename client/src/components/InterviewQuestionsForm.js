@@ -22,7 +22,7 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
     const generateQuestions = async () => {
         setLoading(true);
         try {
-          const response = await axios.post("http://localhost:3001/generate-interview-questions", { id: user.id, job_app_id: jobAppId, type: selectedOption.value });
+          const response = await axios.post("http://localhost:3001/generate-interview-questions", { user_id: user.id, job_app_id: jobAppId, type: selectedOption.value });
           console.log("Response data:", response.data);
           const questionsArray = response.data.questions;
           setQuestions(prevQuestions => [...prevQuestions, ...questionsArray]);

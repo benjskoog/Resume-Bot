@@ -5,7 +5,7 @@ import NavBarItem from './NavBarItem';
 import TopBar from './TopBar';
 import NavBarLogo from './NavBarLogo';
 
-const NavBar = ({ onNewChatClick }) => {
+const NavBar = ({ selectedItem, onNewChatClick }) => {
   const { user, setUser, logout } = useContext(UserContext);
 
   const handleLogout = () => {
@@ -25,19 +25,19 @@ const NavBar = ({ onNewChatClick }) => {
 <div id="Main" className="transform xl:translate-x-0 ease-in-out transition duration-500 flex justify-start items-start h-screen w-full sm:w-64 bg-gray-900 flex-col">
   <NavBarLogo name={`${user.first_name}Bot`}/>
   <div className="mt-6 flex flex-col justify-start items-center pl-5 w-full border-gray-600 border-b space-y-4 pb-5">
-    <Link to="/chat/" onClick={onNewChatClick} className="flex jusitfy-start items-center space-x-6 w-full  focus:outline-none  focus:text-indigo-400  text-white rounded ">
+    <Link to="/chat/" onClick={onNewChatClick} className={`flex justify-start items-center space-x-6 w-full ${selectedItem === "/chat/" ? "outline-none text-indigo-400" : "text-white"} rounded`}>
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
       <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
     </svg>
       <p className="text-base leading-4 ">Resume Bot</p>
     </Link>
-    <Link to="/job-applications" className="flex jusitfy-start items-center w-full  space-x-6 focus:outline-none text-white focus:text-indigo-400 rounded ">
+    <Link to="/job-applications" className={`flex justify-start items-center space-x-6 w-full ${selectedItem === "/job-applications" ? "outline-none text-indigo-400" : "text-white"} rounded`}>
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
       </svg>
       <p className="text-base leading-4 ">Job Applications</p>
     </Link>
-    <Link to="/resume-optimizer" className="flex jusitfy-start items-center w-full  space-x-6 focus:outline-none text-white focus:text-indigo-400 rounded ">
+    <Link to="/resume-optimizer" className={`flex justify-start items-center space-x-6 w-full ${selectedItem === "/resume-optimizer" ? "outline-none text-indigo-400" : "text-white"} rounded`}>
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M14 8.00002C15.1046 8.00002 16 7.10459 16 6.00002C16 4.89545 15.1046 4.00002 14 4.00002C12.8954 4.00002 12 4.89545 12 6.00002C12 7.10459 12.8954 8.00002 14 8.00002Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
           <path d="M4 6H12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -51,13 +51,13 @@ const NavBar = ({ onNewChatClick }) => {
         </svg>
       <p className="text-base leading-4 ">Resume Optimizer</p>
     </Link>
-    <Link to="/interview-questions-form" className="flex jusitfy-start items-center w-full  space-x-6 focus:outline-none text-white focus:text-indigo-400 rounded ">
+    <Link to="/interview-questions-form" className={`flex justify-start items-center space-x-6 w-full ${selectedItem === "/interview-questions-form" ? "outline-none text-indigo-400" : "text-white"} rounded`}>
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
       <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
     </svg>
       <p className="text-base leading-4 ">Interview Questions</p>
     </Link>
-    <Link to="/datasources" className="flex jusitfy-start items-center w-full  space-x-6 focus:outline-none text-white focus:text-indigo-400 rounded ">
+    <Link to="/datasources" className={`flex justify-start items-center space-x-6 w-full ${selectedItem === "/datasources" ? "outline-none text-indigo-400" : "text-white"} rounded`}>
     <svg className="fill-stroke " width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M9 4H5C4.44772 4 4 4.44772 4 5V9C4 9.55228 4.44772 10 5 10H9C9.55228 10 10 9.55228 10 9V5C10 4.44772 9.55228 4 9 4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
         <path d="M19 4H15C14.4477 4 14 4.44772 14 5V9C14 9.55228 14.4477 10 15 10H19C19.5523 10 20 9.55228 20 9V5C20 4.44772 19.5523 4 19 4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />

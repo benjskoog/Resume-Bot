@@ -430,7 +430,6 @@ async def gpt_api_call():
     query = form_values["query"]
     user_id = form_values["id"]
     first_name = form_values["first_name"]
-    request_type = form_values["type"]
     print(user_id)
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
@@ -439,8 +438,6 @@ async def gpt_api_call():
         api_key=api_key,
         model_name="text-embedding-ada-002"
     )
-
-    embeddings_langchain = OpenAIEmbeddings()
 
     chroma_client = chromadb.Client(Settings(
         chroma_db_impl="duckdb+parquet",
@@ -468,6 +465,28 @@ async def gpt_api_call():
         resume_docs_str = ""
 
     try:
+        
+        chroma_collection_jobs = chroma_client.get_collection(name="jobs", embedding_function=embeddings)
+
+        jobs_docs = chroma_collection_jobs.query(
+            query_texts=[query],
+            n_results=2,
+
+        )
+
+        jobs_docs_texts = jobs_docs["documents"]
+
+        jobs_docs_texts_flat = [doc for docs in jobs_docs_texts for doc in docs]
+
+        jobs_docs_str = "\n\n".join(jobs_docs_texts_flat)
+
+        context = f"""\nInformation from {first_name}'s resume:\n {resume_docs_str}""" + f"""\n{first_name}'s job applications:\n {jobs_docs_str}"""
+
+    except:
+
+        context = f"""\nInformation from {first_name}'s resume:\n {resume_docs_str}"""
+
+    try:
 
         chroma_collection_questions = chroma_client.get_collection(name="questions", embedding_function=embeddings)
 
@@ -486,11 +505,11 @@ async def gpt_api_call():
         questions_docs_texts_flat = [doc for docs in questions_docs_texts for doc in docs]
         questions_docs_str = "\n\n".join(questions_docs_texts_flat)
 
-        context = f"""\nInformation from {first_name}'s resume:\n {resume_docs_str}""" + f"""\nInterview questions that have been answered by the {first_name}:\n {questions_docs_str}"""
+        context = context + f"""\nInterview questions that have been answered by {first_name}:\n {questions_docs_str}"""
 
     except:
         
-        context = f"""\nInformation from {first_name}'s resume:\n {resume_docs_str}"""
+        context = context
 
 
     print(chroma_collection_resume.peek())
@@ -501,20 +520,11 @@ async def gpt_api_call():
         temperature=0,
     )
 
-    template_help = f"""You are an intelligent career bot and your job is to help users improve their resume, speak more effectively about their work experience, and provide career guidance. In this case, the user is trying to prepare answers to interview questions specific to their role.
-
-    Please answer the question from the user's perspective and limit your answer to one paragraph. Relevant information from the user's resume is provided below. In a paragraph below the answer, provide a recommendation to them on how they can improve the answer. Do not make anything up.\n
-
-    Relevant information:\n {context}"""
-
-    template_chat_1 = f"""You are an intelligent career personal assistant and your job is to help {first_name} with all things career related. You may be asked to help improve their resume, answer interview questions, prepare for interview, answer recruiter questions and more. Below is relevant information you can use to answer any questions {first_name} may have. Do not make anything up.\n""" 
+    template_chat_1 = f"""You are an intelligent career personal assistant and your job is to help {first_name} with all things career related. You may be asked to help improve their resume, help with their job applications, prepare for interviews, answer recruiter questions and more. Below is relevant information you can use to answer any questions {first_name} may have. Do not make anything up.\n""" 
 
     template_chat = template_chat_1 + f"""Relevant information:\n {context}\n"""
 
-    if request_type == 'chat':
-        final_template = template_chat + """{history}\n User question: {input}"""
-    else:
-        final_template = template_help + """{history}\n User question: {input}"""
+    final_template = template_chat + """{history}\n User question: {input}\n Assistant:"""
 
 
     resume_prompt = PromptTemplate(
@@ -522,12 +532,10 @@ async def gpt_api_call():
         template=final_template      
         )
 
-
     chain_id = form_values.get("chainId") or str(int(time.time()))  # Generate a unique identifier based on the current timestamp
 
     chain = chains.get(chain_id)
     print(chain)
-
 
     if not chain:
         chain = ConversationChain(
@@ -539,28 +547,25 @@ async def gpt_api_call():
 
         chains[chain_id] = chain
 
-        if request_type == 'chat':
-            await db.execute("INSERT INTO chat (user_id, chat_id, chat_name) VALUES (?, ?, ?)", [user_id, chain_id, query])
-            await db.commit()
+        await db.execute("INSERT INTO chat (user_id, chat_id, chat_name) VALUES (?, ?, ?)", [user_id, chain_id, query])
+        await db.commit()
     
     try:
         print(chain)
-        result_endpoint = chain.run(query)
-        answer = result_endpoint.lstrip("AI: ").strip()
+        result_endpoint = chain.predict(input=query)
+        answer = result_endpoint.lstrip("AI: ")
         print(answer)
 
-        # Insert user query and API response into the messages table
-        if request_type == 'chat':
-            timestamp = datetime.now().isoformat()
-            await db.execute(
+        timestamp = datetime.now().isoformat()
+        await db.execute(
+        "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (?, ?, ?, ?, ?)",
+        ["user", user_id, chain_id, query, timestamp]
+        )
+        await db.execute(
             "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (?, ?, ?, ?, ?)",
-            ["user", user_id, chain_id, query, timestamp]
-            )
-            await db.execute(
-                "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (?, ?, ?, ?, ?)",
-                ["bot", user_id, chain_id, answer, timestamp]
-            )
-            await db.commit()
+            ["bot", user_id, chain_id, answer, timestamp]
+        )
+        await db.commit()
 
         return jsonify(answer=answer, chainId=chain_id)
     except Exception as e:
@@ -574,8 +579,8 @@ async def get_answer_help():
     query = form_values["query"]
     user_id = form_values["id"]
     question_id = form_values["question_id"]
-    question_answer = form_values["question_answer"]
-    job_app_id = form_values["job_app_id"]
+    question_answer = form_values.get("question_answer")
+    job_app_id = form_values.get("job_app_id")
     print(user_id)
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
@@ -584,8 +589,6 @@ async def get_answer_help():
         api_key=api_key,
         model_name="text-embedding-ada-002"
     )
-
-    embeddings_langchain = OpenAIEmbeddings()
 
     chroma_client = chromadb.Client(Settings(
         chroma_db_impl="duckdb+parquet",
@@ -599,16 +602,14 @@ async def get_answer_help():
 
     chroma_collection_questions = chroma_client.get_or_create_collection(name="questions", embedding_function=embeddings)
 
-    job_docs = chroma_collection_jobs.query(
-        query_texts=[query],
-        n_results=5,
-        where={"job_app_id": job_app_id}
-    )
-
     resume_docs = chroma_collection_resume.query(
         query_texts=[query],
         n_results=2
     )
+
+    resume_docs_texts = resume_docs["documents"]
+    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
+    resume_docs_str = "\n\n".join(resume_docs_texts_flat)
 
     try:
         questions_docs = chroma_collection_questions.query(
@@ -621,20 +622,6 @@ async def get_answer_help():
         questions_docs_str = "\n\n".join(questions_docs_texts_flat)
     except:
         questions_docs_str = ""
-
-
-    job_docs_texts = job_docs["documents"]
-    resume_docs_texts = resume_docs["documents"]
-    
-
-    job_docs_texts_flat = [doc for docs in job_docs_texts for doc in docs]
-    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
-
-    # Join the document texts
-    job_docs_str = "\n\n".join(job_docs_texts_flat)
-    resume_docs_str = "\n\n".join(resume_docs_texts_flat)
-
-    print("Information from this job post:\n", job_docs_str)
 
     chat = ChatOpenAI(
         model_name="gpt-3.5-turbo",
@@ -653,11 +640,21 @@ async def get_answer_help():
 
         template_base = """You are an intelligent career bot and your job is to help users improve their resume, speak more effectively about their work experience, and provide career guidance. In this case, the user is trying to prepare answers to interview questions specific to their role.
 
-        Please answer the question from the user's perspective and provide a recommendation to the user on what they need to include to improve their answer. Your response must be in JSON with the following properties: "answer" : "", "recommendation": "". Relevant information is provided below. Do not make anything up.\n"""
+        Please answer the question from the user's perspective and provide a recommendation to the user on what they need to include to improve the answer you provided. Your response must be in JSON with the following properties: "answer" : "", "recommendation": "". Relevant information is provided below. Do not make anything up.\n"""
 
     if job_app_id:
 
-        template_help = template_base + f"""Information from this job post:\n {job_docs_str}""" + f"""\nInformation from the users resume:\n {resume_docs_str}""" + f"""\nInterview questions that have been answered by the user:\n {questions_docs_str}"""
+        job_docs = chroma_collection_jobs.query(
+            query_texts=[query],
+            n_results=2,
+            where={"job_app_id": job_app_id}
+        )
+
+        job_docs_texts = job_docs["documents"]
+        job_docs_texts_flat = [doc for docs in job_docs_texts for doc in docs]
+        job_docs_str = "\n\n".join(job_docs_texts_flat)
+
+        template_help = template_base + f"""Information from a job post the user is applying to:\n {job_docs_str}""" + f"""\nInformation from the users resume:\n {resume_docs_str}""" + f"""\nInterview questions that have been answered by the user:\n {questions_docs_str}"""
 
     else:
 
@@ -698,8 +695,8 @@ async def get_answer_help():
 async def generate_interview_questions():
     form_values = request.json
     print(form_values)
-    user_id = form_values["id"]
-    job_app_id = form_values["job_app_id"]
+    user_id = form_values["user_id"]
+    job_app_id = form_values.get("job_app_id")
     question_type = form_values["type"]
 
     chat = ChatOpenAI(
@@ -710,8 +707,6 @@ async def generate_interview_questions():
 
     db = await get_db()
     cursor = await db.cursor()
-    await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("SKILLS",user_id,))
-    resume = await cursor.fetchall()
 
     await cursor.execute(f"SELECT * FROM interview_questions WHERE user_id = ?", (user_id,))
 
@@ -727,8 +722,33 @@ async def generate_interview_questions():
 
     if question_type =="Technical":
         type_string = "specific to their technical capabilities"
+
+    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
+
+    embeddings = embedding_functions.OpenAIEmbeddingFunction(
+        api_key=api_key,
+        model_name="text-embedding-ada-002"
+    )
+
+    chroma_client = chromadb.Client(Settings(
+        chroma_db_impl="duckdb+parquet",
+        persist_directory=user_embeddings_directory
+    ))
+
+    chroma_collection_resume = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
+
+    resume_docs = chroma_collection_resume.query(
+        query_texts=[type_string],
+        n_results=4
+    )
+
+    resume_docs_texts = resume_docs["documents"]
+    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
+    resume_docs_str = "\n\n".join(resume_docs_texts_flat)
  
     if job_app_id:
+
+        resume = resume_docs_str
 
         await cursor.execute(f"SELECT * FROM job_applications WHERE id = ? AND user_id = ?", (job_app_id, user_id,))
 
@@ -743,6 +763,9 @@ async def generate_interview_questions():
 
     else:
         template_questions_base = f"""Below is a user's resume. Please return 3 interview questions {type_string} that they might be asked during an interview. Please return the questions in the following format: ['question1','question2','question3','question4','question5']"""
+
+        await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
+        resume = await cursor.fetchall()
 
     if existing_questions:
         exclude_similar = f"""These questions have already been asked: [{questions_str}]"""
@@ -977,16 +1000,182 @@ async def edit_answer():
     except Exception as e:
         print(e)
         return jsonify(success=False, message="Error updating answer"), 500
+
+@app.route("/generate-recommendations", methods=["POST"])
+async def generate_recommendations():
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    job_app_id = data.get("job_app_id")
+    version_id = data.get("version_id")
+
+    chat = ChatOpenAI(
+        model_name="gpt-3.5-turbo",
+        openai_api_key=api_key,
+        temperature=0,
+    )
+
+    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
+
+    cursor = await db.cursor()
+
+    await cursor.execute(f"SELECT * FROM job_applications WHERE id = ? AND user_id = ?", (job_app_id, user_id,))
+
+    job_app = await cursor.fetchall()
+
+    await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
     
+    resume = await cursor.fetchall()
+
+    await cursor.execute(f"SELECT * FROM resume_recommendations WHERE user_id = ? AND job_app_id = ?", (user_id, job_app_id,))
+
+    existing_recommendations = await cursor.fetchall()
+    recommendations_list = [row[2] for row in existing_recommendations]
+    recommendations_str = ', '.join(f'"{question}"' for question in recommendations_list)
+
+    embeddings = embedding_functions.OpenAIEmbeddingFunction(
+        api_key=api_key,
+        model_name="text-embedding-ada-002"
+    )
+
+    chroma_client = chromadb.Client(Settings(
+        chroma_db_impl="duckdb+parquet",
+        persist_directory=user_embeddings_directory
+    ))
+
+    chroma_collection_jobs = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
+
+    chroma_collection_resume = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
+
+    jobs_docs = chroma_collection_jobs.query(
+        query_texts=["What are the important responsibilities, qualifications, skills, and requirements for this job?"],
+        n_results=4
+    )
+
+    resume_docs = chroma_collection_resume.query(
+        query_texts=["What are the important responsibilities, qualifications, skills, and requirements outlined in this resume?"],
+        n_results=4
+    )
+
+    jobs_docs_texts = jobs_docs["documents"]
+    jobs_docs_texts_flat = [doc for docs in jobs_docs_texts for doc in docs]
+    jobs_docs_str = "\n\n".join(jobs_docs_texts_flat)
+
+    resume_docs_texts = resume_docs["documents"]
+    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
+    resume_docs_str = "\n\n".join(resume_docs_texts_flat)
+
+    template_questions_base = f"""Below is relevant information from a user's resume and the description of a job they are applying to. Please provide 5 recommendations to the user on how they can update their resume to increase their chances of landing an interview. Please make these recommendations specific to the information provided to you. Please return the questions in the following format: ['recommendation1','recommendation2','recommendation3','recommendation4','recommendation5']
+        
+    Job Description Information: {jobs_docs_str}"""
+
+    if existing_recommendations:
+        exclude_similar = f"""These recommendations have already been provided: [{recommendations_str}]"""
+    else:
+        exclude_similar = ""
+
+    template_final = template_questions_base + """\nResume: {context}\n """ + exclude_similar
+
+
+    chain = LLMChain(
+        llm=chat,
+        verbose=True,
+        prompt=PromptTemplate.from_template(template_final)
+    )
+
+    try:
+        recommendation_response = chain(resume_docs_str)
+        print(recommendation_response)
+        # Convert the questions string into a Python list
+        recommendation_string = recommendation_response['text'].replace("'", "\"")
+        escaped_recommendation_string = recommendation_string.replace("\n", "\\n")  # Replace newline characters with "\\n"
+        recommendation_list = json.loads(escaped_recommendation_string)  # Use the escaped string to parse the JSON
+
+        # Save the questions to the interview_questions table
+        for recommendation in recommendation_list:
+            await cursor.execute(
+                "INSERT INTO resume_recommendations (user_id, job_app_id, version_id, recommendation) VALUES (?, ?, ?, ?)",
+                (user_id, job_app_id, version_id ,recommendation),
+            )
+
+        # Commit the changes to the database
+        await db.commit()
+
+        return jsonify(recommendations=recommendation_list)
+    except Exception as e:
+        print(e)
+        return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
+
+@app.route("/get-recommendations", methods=["POST"])
+async def get_recommendations():
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    version_id = data.get("version_id")
+    job_app_id = data.get("job_app_id")
+
+    print(data)
+
+    cursor = await db.cursor()
+
+    # Fetch recommendations based on user_id and version_id
+    # Replace 'recommendations' with the appropriate table name and columns
+
+    if version_id:
+
+        await cursor.execute("SELECT * FROM resume_recommendations WHERE user_id = ? AND version_id = ?", (user_id, version_id))
+
+    elif job_app_id:
+        
+        await cursor.execute("SELECT * FROM resume_recommendations WHERE user_id = ? AND job_app_id = ?", (user_id, job_app_id))
+        
+    recommendations = await cursor.fetchall()
+
+    print("Recommendations fetched:", recommendations) 
+
+    recommendations_data = [
+        {
+            "id": rec[0],
+            "user_id": rec[1],
+            "version_id": rec[2],
+            "recommendation" : rec[4]
+
+        }
+        for rec in recommendations
+    ]
+
+    return jsonify(recommendations=recommendations_data)
+
+
+@app.route("/delete-recommendation", methods=["POST"])
+async def delete_recommendation():
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    recommendation_id = data["recommendation_id"]
+
+    cursor = await db.cursor()
+    try:
+        # Delete the recommendation based on recommendation_id and user_id
+        # Replace 'recommendations' with the appropriate table name
+        await cursor.execute("DELETE FROM resume_recommendations WHERE id = ? AND user_id = ?", (recommendation_id, user_id))
+        await db.commit()
+        return jsonify(success=True, message="Recommendation deleted successfully")
+    except Exception as e:
+        print(e)
+        return jsonify(success=False, message="Error deleting the recommendation")
+
 
 @app.route("/get-job-applications", methods=["POST"])
 async def get_job_applications():
     db = await get_db()
     data = request.json
     user_id = data["user_id"]
+    page = int(data.get("page", 1))
+    items_per_page = int(data.get("itemsPerPage", 10))
 
     cursor = await db.cursor()
-    await cursor.execute("SELECT * FROM job_applications WHERE user_id = ?", (user_id,))
+    await cursor.execute("SELECT * FROM job_applications WHERE user_id = ? ORDER BY date_created DESC LIMIT ? OFFSET ?", (user_id, items_per_page, (page - 1) * items_per_page))
     job_applications = await cursor.fetchall()
 
     applications = [
@@ -998,7 +1187,7 @@ async def get_job_applications():
             "job_description": application[4],
             "status": application[5],
             "date_added": application[6],
-            "post_url": application[7]
+            "post_url": application[7],
         }
         for application in job_applications
     ]
@@ -1128,6 +1317,10 @@ async def edit_job_application(application_id):
 
 @app.route("/delete-job-application/<int:application_id>", methods=["DELETE"])
 async def delete_job_application(application_id):
+
+    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
+    os.makedirs(user_embeddings_directory, exist_ok=True)
+
     db = await get_db()
 
     cursor = await db.cursor()
@@ -1136,8 +1329,194 @@ async def delete_job_application(application_id):
     )
     await db.commit()
 
+    embeddings = embedding_functions.OpenAIEmbeddingFunction(
+        api_key=api_key,
+        model_name="text-embedding-ada-002"
+    )
+        
+    chroma_client = chromadb.Client(Settings(  
+        chroma_db_impl="duckdb+parquet",
+        persist_directory=user_embeddings_directory
+    ))
+
+    chroma_collection = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
+
+    chroma_collection.delete(
+        where={"job_app_id": application_id}
+    )
+
     return jsonify(success=True)
 
+@app.route("/get-resume-versions", methods=["POST"])
+async def get_resume_versions():
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    job_app_id = data.get("job_app_id")
+    page = int(data.get("page", 1))
+    items_per_page = int(data.get("itemsPerPage", 10))
+
+    cursor = await db.cursor()
+
+    if job_app_id:
+        await cursor.execute("SELECT * FROM resume_versions WHERE user_id = ? AND job_app_id = ?", (user_id, job_app_id,))
+    else:
+        await cursor.execute("SELECT * FROM resume_versions WHERE user_id = ? LIMIT ? OFFSET ?", (user_id, items_per_page, (page - 1) * items_per_page))
+    
+    resume_versions = await cursor.fetchall()
+
+    versions = []
+
+    for version in resume_versions:
+        job_app_id = version[2]
+        await cursor.execute("SELECT * FROM job_applications WHERE id = ?", (job_app_id,))
+        job_application = await cursor.fetchone()
+
+        versions.append({
+            "id": version[0],
+            "user_id": version[1],
+            "job_app_id": job_app_id,
+            "job_title": job_application[2],
+            "company_name": job_application[3],
+            "version_name": version[3],
+            "version_text": version[4]
+        })
+
+    return jsonify(versions=versions, headers=["Job Title/Role", "Company Name", "Job Description", "Status"])
+
+
+@app.route("/create-resume-version", methods=["POST"])
+async def create_resume_version():
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    job_app_id = data["job_app_id"]
+    version_name = data.get("version_name")
+
+    chat = ChatOpenAI(
+        model_name="gpt-3.5-turbo",
+        openai_api_key=api_key,
+        temperature=0,
+    )
+
+    cursor = await db.cursor()
+
+    await cursor.execute(f"SELECT * FROM job_applications WHERE id = ? AND user_id = ?", (job_app_id, user_id,))
+
+    job_app = await cursor.fetchone()
+
+    await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
+    
+    resume = await cursor.fetchall()
+
+    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
+
+    embeddings = embedding_functions.OpenAIEmbeddingFunction(
+        api_key=api_key,
+        model_name="text-embedding-ada-002"
+    )
+
+    chroma_client = chromadb.Client(Settings(
+        chroma_db_impl="duckdb+parquet",
+        persist_directory=user_embeddings_directory
+    ))
+
+    chroma_collection_jobs = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
+
+    chroma_collection_resume = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
+
+    jobs_docs = chroma_collection_jobs.query(
+        query_texts=["What are the important responsibilities, qualifications, skills, and requirements for this job?"],
+        n_results=4
+    )
+
+    resume_docs = chroma_collection_resume.query(
+        query_texts=["What are the important responsibilities, qualifications, skills, and requirements outlined in this resume?"],
+        n_results=4
+    )
+
+    jobs_docs_texts = jobs_docs["documents"]
+    jobs_docs_texts_flat = [doc for docs in jobs_docs_texts for doc in docs]
+    jobs_docs_str = "\n\n".join(jobs_docs_texts_flat)
+
+    resume_docs_texts = resume_docs["documents"]
+    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
+    resume_docs_str = "\n\n".join(resume_docs_texts_flat)
+
+    template_questions_base = f"""Below is relevant information from a user's resume and the description of a job they are applying to. Please provide 5 recommendations to the user on how they can update their resume to increase their chances of landing an interview. Please return the questions in the following format: ['recommendation1','recommendation2','recommendation3','recommendation4','recommendation5']
+        
+    Job Description Information: {jobs_docs_str}"""
+
+    template_final = template_questions_base + """Resume Information: {context} """
+
+
+    chain = LLMChain(
+        llm=chat,
+        prompt=PromptTemplate.from_template(template_final)
+    )
+
+    try:
+        recommendation_response = chain(resume_docs_str)
+        print(recommendation_response)
+        # Convert the questions string into a Python list
+        recommendation_string = recommendation_response['text'].replace("'", "\"")
+        escaped_recommendation_string = recommendation_string.replace("\n", "\\n")  # Replace newline characters with "\\n"
+        recommendation_list = json.loads(escaped_recommendation_string)  # Use the escaped string to parse the JSON
+
+        await cursor.execute(
+            "INSERT INTO resume_versions (user_id, job_app_id, version_name) VALUES (?, ?, ?)",
+            (user_id, job_app_id, version_name),
+        )
+
+        version_id = cursor.lastrowid
+
+        # Save the questions to the interview_questions table
+        for recommendation in recommendation_list:
+            await cursor.execute(
+                "INSERT INTO resume_recommendations (user_id, job_app_id, version_id, recommendation) VALUES (?, ?, ?, ?)",
+                (user_id, job_app_id, version_id ,recommendation),
+            )
+
+        # Commit the changes to the database
+        await db.commit()
+
+        return jsonify({"id": version_id, "user_id": user_id, "job_app_id": job_app_id, "version_name": version_name, "job_title": job_app[2], "company_name": job_app[3]})
+    
+    except Exception as e:
+        print(e)
+        return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
+
+
+
+@app.route("/edit-resume-version/<int:resume_version_id>", methods=["PUT"])
+async def edit_resume_version(resume_version_id):
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    job_app_id = data["job_app_id"]
+    version_name = data["version_name"]
+
+    cursor = await db.cursor()
+    await cursor.execute(
+        "UPDATE resume_versions SET user_id = ?, job_app_id = ?, version_name = ? WHERE id = ?",
+        (user_id, job_app_id, version_name, resume_version_id),
+    )
+    await db.commit()
+
+    return jsonify(success=True, resume_version_id=resume_version_id)
+
+
+@app.route("/delete-resume-version/<int:resume_version_id>", methods=["DELETE"])
+async def delete_resume_version(resume_version_id):
+    db = await get_db()
+
+    cursor = await db.cursor()
+    await cursor.execute(
+        "DELETE FROM resume_versions WHERE id = ?", (resume_version_id,)
+    )
+    await db.commit()
+
+    return jsonify(success=True)
 
 @app.route("/get-database-tables", methods=["GET"])
 async def get_database_tables():

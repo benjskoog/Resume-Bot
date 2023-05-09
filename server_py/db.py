@@ -70,6 +70,28 @@ async def setup_db():
                 FOREIGN KEY (job_app_id) REFERENCES job_applications (id)
             );
 
+            CREATE TABLE IF NOT EXISTS resume_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                job_app_id INTEGER,
+                version_name TEXT,
+                version_text TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id),
+                FOREIGN KEY (job_app_id) REFERENCES job_applications (id)
+            );
+
+            CREATE TABLE IF NOT EXISTS resume_recommendations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                job_app_id INTEGER,
+                version_id TEXT,
+                recommendation TEXT,
+                user_notes TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id),
+                FOREIGN KEY (job_app_id) REFERENCES job_applications (id),
+                FOREIGN KEY (version_id) REFERENCES resume_versions (id)
+            );
+
             CREATE TABLE IF NOT EXISTS linkedIn (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,

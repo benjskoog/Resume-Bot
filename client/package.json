@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "cd client && npm install && npm start && cd .. && cd server_py && python app.py",
-    "build": "cd client && ls && pwd && npm run build && cd .. && pwd",
+    "build": "echo $(pwd) && cd client && echo $(pwd) && npm run build && cd .. && echo $(pwd)",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

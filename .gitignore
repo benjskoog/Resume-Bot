@@ -1,2 +1,3 @@
 server/.env
 server_py/.env
+node_modules

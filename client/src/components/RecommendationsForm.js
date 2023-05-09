@@ -70,6 +70,12 @@ function RecommendationsForm({ jobAppId, resumeVersionId }) {
   
   
   return (
+    <div className="relative">
+    {loading && (
+              <div className="absolute inset-0 z-10 flex justify-center items-center bg-white bg-opacity-50">
+                  <div className="w-12 h-12 mt-4 mb-4 rounded-full animate-spin border-y-2 border-solid border-gray-900 border-t-transparent"></div>
+              </div>
+              )}
     <div className="bg-white p-4 max-w-full flex flex-col items-center">
       <div className="flex max-w-6xl mt-2 w-full">
       <button
@@ -81,12 +87,7 @@ function RecommendationsForm({ jobAppId, resumeVersionId }) {
         Generate Recommendations
       </button>
       </div>
-      <div className="flex flex-col">
-      {loading ? (
-          <div className="flex justify-center items-center h-16">
-            <div class="w-12 h-12 mt-4 mb-4 rounded-full animate-spin border-y-2 border-solid border-gray-900 border-t-transparent"></div>
-          </div>
-        ) : (
+      <div className="flex flex-col max-w-6xl mt-2 w-full">
           <ul className="max-w-7xl">
         {recommendations.map((recommendation, index) => (
           <li key={index} className="mb-2">
@@ -117,8 +118,8 @@ function RecommendationsForm({ jobAppId, resumeVersionId }) {
           </li>
         ))}
       </ul>
-        )}
       </div>
+    </div>
     </div>
   );
 }

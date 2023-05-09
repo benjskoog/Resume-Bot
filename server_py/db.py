@@ -135,7 +135,7 @@ async def get_table_data(table_name, user_id):
 
         if table_name == "users":
             # Filter rows by user_id only for the "users" table
-            await cursor.execute(f"SELECT * FROM {table_name} WHERE id = ?", (user_id,))
+            await cursor.execute(f"SELECT * FROM {table_name}")
         else:
             # No filtering for other tables
             await cursor.execute(f"SELECT * FROM {table_name} WHERE user_id = ?", (user_id,))

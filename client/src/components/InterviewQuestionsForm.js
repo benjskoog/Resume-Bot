@@ -119,6 +119,12 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
   
   
   return (
+    <div className="relative">
+    {loading && (
+              <div className="absolute inset-0 z-10 flex justify-center items-center bg-white bg-opacity-50">
+                  <div className="w-12 h-12 mt-4 mb-4 rounded-full animate-spin border-y-2 border-solid border-gray-900 border-t-transparent"></div>
+              </div>
+              )}
     <div className={`${jobApp ? "bg-white" : "bg-gray-200 overflow-y-auto h-[calc(100vh-72px)]"} p-4 max-w-full flex flex-col items-center`}>
       <div className={`flex ${jobApp ? "max-w-6xl" : "max-w-7xl"} mt-2 w-full`}>
       <Select
@@ -146,12 +152,7 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
         Generate Questions
       </button>
       </div>
-      <div className="flex flex-col">
-      {loading ? (
-          <div className="flex justify-center items-center h-16">
-            <div class="w-12 h-12 mt-4 rounded-full animate-spin border-y-2 border-solid border-gray-900 border-t-transparent"></div>
-          </div>
-        ) : (
+      <div className={`flex flex-col ${jobApp ? "max-w-6xl" : "max-w-7xl"} mt-2 w-full`}>
           <ul className={`${jobApp ? "max-w-6xl" : "max-w-7xl"}`}>
         {questions
             .filter((question) => !jobApp || question.job_app_id === jobAppId)
@@ -192,8 +193,6 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
           </li>
         ))}
       </ul>
-        )}
-      </div>
       {isModalOpen && (
         <QuestionModal
           question={selectedQuestion}
@@ -202,6 +201,8 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
           submit={handleSubmit}
         />
       )}
+    </div>
+    </div>
     </div>
   );
 }

@@ -756,13 +756,13 @@ async def generate_interview_questions():
 
         print(job_app)
 
-        template_questions_base = f"""Below is a user's resume and the description for a job they are applying to. Please return 3 interview questions {type_string} that they might be asked during an interview for this job. Please return the questions in the following format: ['question1','question2','question3','question4','question5']
+        template_questions_base = f"""Below is a user's resume and the description for a job they are applying to. Please return 3 interview questions {type_string} that they might be asked during an interview for this job. Please return the questions in the following format: ["question1","question2","question3"]
         
         Job Description: {job_app[0][4]}
         """
 
     else:
-        template_questions_base = f"""Below is a user's resume. Please return 3 interview questions {type_string} that they might be asked during an interview. Please return the questions in the following format: ['question1','question2','question3','question4','question5']"""
+        template_questions_base = f"""Below is a user's resume. Please return 3 interview questions {type_string} that they might be asked during an interview. Please return the questions in the following format: ["question1","question2","question3"]"""
 
         await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
         resume = await cursor.fetchall()

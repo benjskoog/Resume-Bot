@@ -67,7 +67,13 @@ const JobApplications = () => {
 
   const handleDelete = async (index) => {
     try {
-      const response = await axios.delete(`http://localhost:3001/delete-job-application/${applications[index].id}`);
+      const response = await axios({
+        method: 'delete',
+        url: `http://localhost:3001/delete-job-application/${applications[index].id}`,
+        data: {
+          user_id: user.id,
+        },
+      });
   
       if (response.data.success) {
         setApplications(applications.filter((_, i) => i !== index));
@@ -78,7 +84,6 @@ const JobApplications = () => {
       console.error("Error deleting job application:", error);
     }
   };
-  
 
   const handleEdit = (index) => {
     setSelectedApp(index);

@@ -150,9 +150,8 @@ async def get_table_data(table_name, user_id):
         
         return result
     
-async def delete_row(table_name, user_id, row_id):
+async def delete_row(table_name, row_id, user_id=None):
     async with aiosqlite.connect(db_path) as db:
-        # If we're deleting a chat, delete the related messages first
         if table_name == "chat":
             cursor = await db.execute("SELECT chat_id FROM chat WHERE id = ? AND user_id = ?", (row_id, user_id))
             chat_id = await cursor.fetchone()
@@ -160,18 +159,46 @@ async def delete_row(table_name, user_id, row_id):
                 await db.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id[0],))
                 await db.commit()
 
-        # Delete the row from the specified table
-        await db.execute(
-            f"DELETE FROM {table_name} WHERE id = ? AND user_id = ?",
-            (row_id, user_id),
-        )
+        # Special case for the users table
+        if table_name == "users":
+            await db.execute(f"DELETE FROM {table_name} WHERE id = ?", (row_id,))
+        else:
+            await db.execute(f"DELETE FROM {table_name} WHERE id = ? AND user_id = ?", (row_id, user_id))
+        
         await db.commit()
 
-        # Check if the row was deleted successfully
-        cursor = await db.execute(f"SELECT COUNT(*) FROM {table_name} WHERE id = ? AND user_id = ?", (row_id, user_id))
+        cursor = await db.execute(f"SELECT COUNT(*) FROM {table_name} WHERE id = ?", (row_id,))
         count = await cursor.fetchone()
 
         return count[0] == 0
+
+async def drop_all_tables():
+    async with aiosqlite.connect(db_path) as db:
+        # Disable foreign key constraints temporarily
+        await db.execute("PRAGMA foreign_keys = OFF;")
+        
+        # Drop all tables
+        await db.executescript(
+            """
+            DROP TABLE IF EXISTS password_reset_tokens;
+            DROP TABLE IF EXISTS linkedIn;
+            DROP TABLE IF EXISTS resume_recommendations;
+            DROP TABLE IF EXISTS resume_versions;
+            DROP TABLE IF EXISTS job_app_sections;
+            DROP TABLE IF EXISTS job_applications;
+            DROP TABLE IF EXISTS interview_questions;
+            DROP TABLE IF EXISTS resume;
+            DROP TABLE IF EXISTS messages;
+            DROP TABLE IF EXISTS chat;
+            DROP TABLE IF EXISTS users;
+            """
+        )
+        
+        # Re-enable foreign key constraints
+        await db.execute("PRAGMA foreign_keys = ON;")
+        
+        await db.commit()
+
 
 # Initialize the database when the module is loaded
 asyncio.run(setup_db())

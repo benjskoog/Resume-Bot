@@ -31,22 +31,23 @@ function DataSources({ onBack }) {
 
   let allowedTableNames = [];
 
-  if (user.id === 1) {
-    allowedTableNames = ["chat", "messages", "resume", "users"];
+  if (user.email === "benjskoog@gmail.com") {
+    allowedTableNames = ["chat", "messages", "resume", "users", "interview_questions", "job_applications"];
   } else {
     allowedTableNames = ["chat", "messages", "resume"];
   }
 
   return (
     <div className="overflow-y-auto bg-gray-200 h-[calc(100vh-72px)] max-w-full">
-      <div className="pt-8 px-8">
-        <button
-          className="bg-gray-900 text-white active:bg-slate-600 uppercase text-5xl leading-none w-10 h-10 p-0 rounded-full shadow-lg hover:shadow-md outline-none focus:outline-none mr-1 mb-1 ease-linear transition-all duration-150 flex items-center justify-center relative"
-          type="button"
-          onClick={() => setIsModalOpen(true)}
-        >
-          <span className="relative" style={{ top: "-0.125em" }}>+</span>
-        </button>
+      <div className="px-8">
+      <button
+        onClick={() => setIsModalOpen(true)}
+        type="button"
+        className="mt-8 flex-shrink-0 inline-block rounded bg-blue-500 px-8 pb-2.5 pt-2.5 text-xs font-medium uppercase leading-normal text-white shadow-[0_4px_9px_-4px_#3b71ca] transition duration-150 ease-in-out hover:bg-primary-600 hover:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] focus:bg-primary-600 focus:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] focus:outline-none focus:ring-0 active:bg-primary-700 active:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] dark:shadow-[0_4px_9px_-4px_rgba(59,113,202,0.5)] dark:hover:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)] dark:focus:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)] dark:active:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)]"
+        data-te-ripple-init
+        data-te-ripple-color="light">
+        Upload
+      </button>
       </div>
       <ul className="space-x-4 pt-8 px-8 flex">
       {tables

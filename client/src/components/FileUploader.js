@@ -181,7 +181,7 @@ const FileUploader = ({ setIsModalOpen, closeModal }) => {
               </p>
               <input id="hidden-input" type="file" multiple className="hidden" ref={hiddenInputRef} onChange={handleFilesChange}/>
               <button id="button" onClick={handleSelectFilesClick} className="mt-2 rounded-sm px-3 py-1 bg-gray-200 hover:bg-gray-300 focus:shadow-outline focus:outline-none">
-                Upload a file
+                Upload your resume
               </button>
             </header>
 

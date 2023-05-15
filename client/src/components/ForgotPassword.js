@@ -8,7 +8,8 @@ function ForgotPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:3001/forgot-password', { email });
+      const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+      const response = await axios.post(`${backendUrl}/forgot-password`, { email });
       setMessage(response.data.message);
     } catch (error) {
       console.error('Error sending reset email:', error);

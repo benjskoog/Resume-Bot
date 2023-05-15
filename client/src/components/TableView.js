@@ -8,11 +8,12 @@ function TableView() {
   const [tableData, setTableData] = useState([]);
   const { tableName } = useParams();
   const { user } = useContext(UserContext);
+  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
 
 async function deleteRow(rowId) {
   try {
     const response = await axios.delete(
-      `http://localhost:3001/delete-row/${tableName}/${rowId}`,
+      `${backendUrl}/delete-row/${tableName}/${rowId}`,
       { params: { user_id: user.id } }
     );
     setTableData((prevTableData) => prevTableData.filter((row) => row.id !== rowId));
@@ -26,7 +27,7 @@ async function deleteRow(rowId) {
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await axios.get(`http://localhost:3001/get-table-data/${tableName}`, {
+        const response = await axios.get(`${backendUrl}/get-table-data/${tableName}`, {
           params: { user_id: user.id },
         });
         setTableData(response.data);

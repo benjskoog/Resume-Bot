@@ -18,7 +18,8 @@ function DataSources({ onBack }) {
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await axios.get("http://localhost:3001/get-database-tables");
+        const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+        const response = await axios.get(`${backendUrl}/get-database-tables`);
         setTables(response.data.tables);
         console.log(response.data)
       } catch (error) {

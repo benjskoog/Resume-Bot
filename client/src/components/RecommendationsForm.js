@@ -11,11 +11,13 @@ function RecommendationsForm({ jobAppId, resumeVersionId }) {
     const [triggerUpdate, setTriggerUpdate] = useState(false);
     const { user, setUser, logout } = useContext(UserContext);
 
+    const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+
     const generateRecomendations = async () => {
         setLoading(true);
         console.log(jobAppId)
         try {
-          const response = await axios.post("http://localhost:3001/generate-recommendations", { user_id: user.id, version_id: resumeVersionId, job_app_id: jobAppId});
+          const response = await axios.post(`${backendUrl}/generate-recommendations`, { user_id: user.id, version_id: resumeVersionId, job_app_id: jobAppId});
           console.log("Response data:", response.data);
           const recommendationsArray = response.data.recommendations;
           setRecommendations(prevRecommendations => [...prevRecommendations, ...recommendationsArray]);
@@ -33,7 +35,7 @@ function RecommendationsForm({ jobAppId, resumeVersionId }) {
               console.log(jobAppId)
               console.log(resumeVersionId)
               try {
-                const response = await axios.post("http://localhost:3001/get-recommendations", {
+                const response = await axios.post(`${backendUrl}/get-recommendations`, {
                   user_id: user.id,
                   version_id: resumeVersionId
                 });
@@ -52,7 +54,7 @@ function RecommendationsForm({ jobAppId, resumeVersionId }) {
 
   const deleteRecommendation = async (recommendation) => {
     try {
-      const response = await axios.post('http://localhost:3001/delete-recommendation', {
+      const response = await axios.post(`${backendUrl}/delete-recommendation`, {
         user_id: user.id,
         recommendation_id: recommendation.id,
       });

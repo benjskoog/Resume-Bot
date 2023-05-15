@@ -25,6 +25,8 @@ const Main = React.forwardRef((props, ref) => {
   const [linkedIn, setLinkedIn] = useState({});
   const chatRef = useRef();
 
+  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+
   const clearMainState = () => {
     setResume({});
     setLinkedIn({});
@@ -37,7 +39,7 @@ const Main = React.forwardRef((props, ref) => {
   
   async function fetchExperienceData() {
     try {
-      const proxyUrl = "http://localhost:3001/fetch-experience-data";
+      const proxyUrl = `${backendUrl}/fetch-experience-data`;
       const response = await axios.get(proxyUrl);
       const experienceData = response.data;
       return experienceData;

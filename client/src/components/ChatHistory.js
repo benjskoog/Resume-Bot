@@ -7,7 +7,8 @@ const ChatHistory = ({ userId, onSubmit, clearChatState }) => {
 
     async function fetchChats() {
       try {
-        const response = await axios.get(`http://localhost:3001/get-table-data/chat`, {
+        const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+        const response = await axios.get(`${backendUrl}/get-table-data/chat`, {
           params: { user_id: userId },
         });
         setChats(response.data);
@@ -21,8 +22,9 @@ const ChatHistory = ({ userId, onSubmit, clearChatState }) => {
       e.preventDefault();
       e.stopPropagation();
       try {
+        const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
         const response = await axios.delete(
-          `http://localhost:3001/delete-row/chat/${chatId}`,
+          `${backendUrl}/delete-row/chat/${chatId}`,
           { params: { user_id: userId } }
         );
         console.log("Deleted rows:", response.data.deleted_rows);

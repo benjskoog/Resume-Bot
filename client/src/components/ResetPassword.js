@@ -13,6 +13,7 @@ function ResetPassword() {
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
     const token = searchParams.get('token');
+    const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
   
     const handleSubmit = async (e) => {
       e.preventDefault();
@@ -22,7 +23,7 @@ function ResetPassword() {
       }
       try {
         console.log(token)
-        const response = await axios.post('http://localhost:3001/reset-password', { token, password });
+        const response = await axios.post(`${backendUrl}/reset-password`, { token, password });
         setMessage(response.data.message);
       } catch (error) {
         console.error('Error resetting password:', error);

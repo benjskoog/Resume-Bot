@@ -11,6 +11,7 @@ function UserSettings() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
 
   const handleCheckboxChange = () => {
     setShowPasswordFields(!showPasswordFields);
@@ -20,7 +21,7 @@ function UserSettings() {
     e.preventDefault();
     if (showPasswordFields && newPassword !== '' && newPassword === confirmNewPassword) {
       try {
-        const response = await axios.put('http://localhost:3001/update-password', {
+        const response = await axios.put(`${backendUrl}/update-password`, {
           email: user.email,
           newPassword: newPassword,
         });

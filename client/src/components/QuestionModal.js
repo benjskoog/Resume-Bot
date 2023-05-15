@@ -8,6 +8,8 @@ function QuestionModal({ question, closeModal, setIsModalOpen, submit }) {
   const [loading, setLoading] = useState(false);
   const { user, setUser, logout } = useContext(UserContext);
 
+  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -27,7 +29,7 @@ function QuestionModal({ question, closeModal, setIsModalOpen, submit }) {
   
 
   const getAnswerHelp = async () => {
-    const proxyEndpoint = "http://localhost:3001/get-answer-help";
+    const proxyEndpoint = `${backendUrl}/get-answer-help`;
     const data = {
       id: user.id,
       question_id: question.id,

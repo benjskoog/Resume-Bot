@@ -12,11 +12,12 @@ function Register() {
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [loggedIn, setLoggedIn] = useState(false);
   const { setUser } = useContext(UserContext);
+  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:3001/register', {
+      const response = await axios.post(`${backendUrl}/register`, {
         first_name,
         last_name,
         email,

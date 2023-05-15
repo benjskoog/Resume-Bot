@@ -18,11 +18,13 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
         { value: 'RoleBased', label: 'Role Based' },
         { value: 'Technical', label: 'Technical' }
       ];
+    
+    const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
 
     const generateQuestions = async () => {
         setLoading(true);
         try {
-          const response = await axios.post("http://localhost:3001/generate-interview-questions", { user_id: user.id, job_app_id: jobAppId, type: selectedOption.value });
+          const response = await axios.post(`${backendUrl}/generate-interview-questions`, { user_id: user.id, job_app_id: jobAppId, type: selectedOption.value });
           console.log("Response data:", response.data);
           const questionsArray = response.data.questions;
           setQuestions(prevQuestions => [...prevQuestions, ...questionsArray]);
@@ -37,7 +39,7 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
     
     const handleSubmit = async (questionId, question, route, answer) => {
         try {
-            const response = await axios.post(`http://localhost:3001${route}`, {
+            const response = await axios.post(`${backendUrl}/${route}`, {
               user_id: user.id,
               question_id: questionId,
               question: question,
@@ -64,7 +66,7 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
             async function fetchQuestions() {
               setLoading(true);
               try {
-                const response = await axios.post("http://localhost:3001/get-interview-questions", {
+                const response = await axios.post(`${backendUrl}/get-interview-questions`, {
                   user_id: user.id,
                   job_app_id: jobAppId,
                 });
@@ -96,7 +98,7 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
 
   const deleteQuestion = async (question) => {
     try {
-      const response = await axios.post('http://localhost:3001/delete-interview-question', {
+      const response = await axios.post(`${backendUrl}/delete-interview-question`, {
         user_id: user.id,
         question_id: question.id,
       });

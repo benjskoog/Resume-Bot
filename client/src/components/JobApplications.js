@@ -14,12 +14,14 @@ const JobApplications = () => {
   const { user, setUser, logout } = useContext(UserContext);
   const navigate = useNavigate();
 
+  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+
   const handleSave = async (updatedApp) => {
     setLoading(true);
     try {
       if (selectedApp === null) {
         // Create a new job application
-        const response = await axios.post('http://localhost:3001/create-job-application', {
+        const response = await axios.post(`${backendUrl}/create-job-application`, {
           user_id: user.id,
           job_title: updatedApp.job_title,
           company_name: updatedApp.company_name,
@@ -32,7 +34,7 @@ const JobApplications = () => {
         setApplications([...applications, newApp]);
       } else {
         // Edit an existing job application
-        const response = await axios.put(`http://localhost:3001/edit-job-application/${applications[selectedApp].id}`, {
+        const response = await axios.put(`${backendUrl}/edit-job-application/${applications[selectedApp].id}`, {
           user_id: user.id,
           job_title: updatedApp.job_title,
           company_name: updatedApp.company_name,
@@ -69,7 +71,7 @@ const JobApplications = () => {
     try {
       const response = await axios({
         method: 'delete',
-        url: `http://localhost:3001/delete-job-application/${applications[index].id}`,
+        url: `${backendUrl}/delete-job-application/${applications[index].id}`,
         data: {
           user_id: user.id,
         },
@@ -127,7 +129,7 @@ const JobApplications = () => {
     setLoading(true);
     const fetchApplications = async () => {
       try {
-        const response = await axios.post('http://localhost:3001/get-job-applications', {
+        const response = await axios.post(`${backendUrl}/get-job-applications`, {
           user_id: user.id,
           page: currentPage,
           itemsPerPage: itemsPerPage,

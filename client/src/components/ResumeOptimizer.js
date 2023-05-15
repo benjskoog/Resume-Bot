@@ -14,6 +14,7 @@ const ResumeOptimizer = () => {
   const [itemsPerPage, setItemsPerPage] = useState(4); // Change this to your desired number of items per page
   const { user, setUser, logout } = useContext(UserContext);
   const navigate = useNavigate();
+  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
 
   const handleSave = async (updatedResume) => {
     setLoading(true);
@@ -21,7 +22,7 @@ const ResumeOptimizer = () => {
       let newVersion;
       if (selectedResume === null) {
         // Create a new job resume
-        const response = await axios.post('http://localhost:3001/create-resume-version', {
+        const response = await axios.post(`${backendUrl}/create-resume-version`, {
           user_id: user.id,
           job_app_id: updatedResume.job_app_id,
           version_name: updatedResume.version_name,
@@ -30,7 +31,7 @@ const ResumeOptimizer = () => {
         newVersion = response.data;
       } else {
         // Edit an existing job resume
-        const response = await axios.put(`http://localhost:3001/edit-resume-version/${resumes[selectedResume].id}`, {
+        const response = await axios.put(`${backendUrl}/edit-resume-version/${resumes[selectedResume].id}`, {
             user_id: user.id,
             job_app_id: updatedResume.job_app_id,
             version_name: updatedResume.version_name,
@@ -62,7 +63,7 @@ const ResumeOptimizer = () => {
 
   const handleDelete = async (index) => {
     try {
-      const response = await axios.delete(`http://localhost:3001/delete-resume-version/${resumes[index].id}`);
+      const response = await axios.delete(`${backendUrl}/delete-resume-version/${resumes[index].id}`);
   
       if (response.data.success) {
         setResumes(resumes.filter((_, i) => i !== index));
@@ -101,7 +102,7 @@ const ResumeOptimizer = () => {
     setLoading(true);
     const fetchResumes = async () => {
       try {
-        const response = await axios.post('http://localhost:3001/get-resume-versions', {
+        const response = await axios.post(`${backendUrl}/get-resume-versions`, {
           user_id: user.id,
           job_app_id: null
         });
@@ -121,7 +122,7 @@ const ResumeOptimizer = () => {
   useEffect(() => {
     async function fetchJobApplications() {
             try {
-              const response = await axios.post('http://localhost:3001/get-job-applications', {
+              const response = await axios.post(`${backendUrl}/get-job-applications`, {
                 user_id: user.id,
                 page: currentPage,
                 itemsPerPage: itemsPerPage,

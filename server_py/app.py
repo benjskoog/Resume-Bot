@@ -156,6 +156,25 @@ async def register():
     await cursor.execute("SELECT * FROM users WHERE email=?", (data["email"],))
     user = await cursor.fetchone()
 
+    user_embeddings_directory = os.path.join(persist_directory, f"user_{user[0]}_embeddings")
+    os.makedirs(user_embeddings_directory, exist_ok=True)
+
+    chroma_client = chromadb.Client(Settings(
+        chroma_db_impl="duckdb+parquet",
+        persist_directory=user_embeddings_directory
+    ))
+
+    embeddings = embedding_functions.OpenAIEmbeddingFunction(
+        api_key=api_key,
+        model_name="text-embedding-ada-002"
+    )
+
+    chroma_client.create_collection(name="resume", embedding_function=embeddings)
+
+    chroma_client.create_collection(name="jobs", embedding_function=embeddings)
+
+    chroma_client.create_collection(name="questions", embedding_function=embeddings)
+
     return jsonify({"id": user[0], "email": user[3], "first_name": user[1], "last_name": user[2]}), 201
 
 @app.route("/login", methods=["POST"])
@@ -167,7 +186,6 @@ async def login():
     cursor = await db.cursor()
     await cursor.execute("SELECT * FROM users WHERE email=?", (data["email"],))
     user = await cursor.fetchone()
-    print(user[3])
 
     if not user or not check_password_hash(user[4], data["password"]):
         return jsonify({"error": "Invalid username or password"}), 401
@@ -385,8 +403,6 @@ async def upload_resume():
             persist_directory=user_embeddings_directory
         ))
 
-
-
         chroma_collection = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
 
         chroma_collection.delete(
@@ -470,7 +486,7 @@ async def gpt_api_call():
 
         jobs_docs = chroma_collection_jobs.query(
             query_texts=[query],
-            n_results=2,
+            n_results=4,
 
         )
 
@@ -480,7 +496,7 @@ async def gpt_api_call():
 
         jobs_docs_str = "\n\n".join(jobs_docs_texts_flat)
 
-        context = f"""\nInformation from {first_name}'s resume:\n {resume_docs_str}""" + f"""\n{first_name}'s job applications:\n {jobs_docs_str}"""
+        context = f"""\nInformation from {first_name}'s resume:\n {resume_docs_str}""" + f"""\nInformation from {first_name}'s job applications:\n {jobs_docs_str}"""
 
     except:
 
@@ -490,7 +506,7 @@ async def gpt_api_call():
 
         chroma_collection_questions = chroma_client.get_collection(name="questions", embedding_function=embeddings)
 
-        if chroma_collection_questions.count() < 4:
+        if chroma_collection_questions.count() < 2:
             q_num = chroma_collection_questions.count()
         else:
             q_num = 2
@@ -553,7 +569,7 @@ async def gpt_api_call():
     try:
         print(chain)
         result_endpoint = chain.predict(input=query)
-        answer = result_endpoint.lstrip("AI: ")
+        answer = result_endpoint
         print(answer)
 
         timestamp = datetime.now().isoformat()
@@ -647,7 +663,7 @@ async def get_answer_help():
         job_docs = chroma_collection_jobs.query(
             query_texts=[query],
             n_results=2,
-            where={"job_app_id": job_app_id}
+            where={"job_app_id": job_app_id}  # directly convert job_app_id to string
         )
 
         job_docs_texts = job_docs["documents"]
@@ -756,13 +772,13 @@ async def generate_interview_questions():
 
         print(job_app)
 
-        template_questions_base = f"""Below is a user's resume and the description for a job they are applying to. Please return 3 interview questions {type_string} that they might be asked during an interview for this job. Please return the questions in the following format: ["question1","question2","question3"]
+        template_questions_base = f"""Below is a user's resume and the description for a job they are applying to. Please return 3 interview questions {type_string} that they might be asked during an interview for this job. Please return the questions separated by newlines.
         
         Job Description: {job_app[0][4]}
         """
 
     else:
-        template_questions_base = f"""Below is a user's resume. Please return 3 interview questions {type_string} that they might be asked during an interview. Please return the questions in the following format: ["question1","question2","question3"]"""
+        template_questions_base = f"""Below is a user's resume. Please return 3 interview questions {type_string} that they might be asked during an interview. Please return the questions separated by newlines."""
 
         await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
         resume = await cursor.fetchall()
@@ -786,10 +802,8 @@ async def generate_interview_questions():
         questions_response = chain(resume)
         print(questions_response)
         # Convert the questions string into a Python list
-        questions_string = questions_response['text'].replace("'", "\"")
-        escaped_questions_string = questions_string.replace("\n", "\\n")  # Replace newline characters with "\\n"
-        questions_list = json.loads(escaped_questions_string)  # Use the escaped string to parse the JSON
-
+        questions_string = questions_response['text']
+        questions_list = [re.sub(r'^\d+\.\s*', '', i) for i in questions_string.split('\n')]
         # Save the questions to the interview_questions table
         for question in questions_list:
             await cursor.execute(
@@ -828,9 +842,9 @@ async def get_interview_questions():
         {
             "id": question[0],
             "user_id": question[1],
-            "question": question[2],
-            "answer": question[3],
-            "job_app_id": question[4],
+            "question": question[3],
+            "answer": question[4],
+            "job_app_id": question[2],
             "recommendation": question[5]
         }
         for question in interview_questions
@@ -863,7 +877,7 @@ async def delete_interview_question():
         chroma_collection = chroma_client.get_or_create_collection(name="questions", embedding_function=embeddings)
 
         chroma_collection.delete(
-            ids=[question_id]
+            ids=[str(question_id)]
         )
 
         await cursor.execute("DELETE FROM interview_questions WHERE id = ? AND user_id = ?", (question_id, user_id))
@@ -1065,7 +1079,7 @@ async def generate_recommendations():
     resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
     resume_docs_str = "\n\n".join(resume_docs_texts_flat)
 
-    template_questions_base = f"""Below is relevant information from a user's resume and the description of a job they are applying to. Please provide 5 recommendations to the user on how they can update their resume to increase their chances of landing an interview. Please make these recommendations specific to the information provided to you. Please return the questions in the following format: ['recommendation1','recommendation2','recommendation3','recommendation4','recommendation5']
+    template_questions_base = f"""Below is relevant information from a user's resume and the description of a job they are applying to. Please provide 5 recommendations to the user on how they can update their resume to increase their chances of landing an interview. Please return the recommendations separated by newlines.
         
     Job Description Information: {jobs_docs_str}"""
 
@@ -1087,9 +1101,8 @@ async def generate_recommendations():
         recommendation_response = chain(resume_docs_str)
         print(recommendation_response)
         # Convert the questions string into a Python list
-        recommendation_string = recommendation_response['text'].replace("'", "\"")
-        escaped_recommendation_string = recommendation_string.replace("\n", "\\n")  # Replace newline characters with "\\n"
-        recommendation_list = json.loads(escaped_recommendation_string)  # Use the escaped string to parse the JSON
+        recommendation_string = recommendation_response['text']
+        recommendation_list = [re.sub(r'^\d+\.\s*', '', i) for i in recommendation_string.split('\n')]
 
         # Save the questions to the interview_questions table
         for recommendation in recommendation_list:
@@ -1317,6 +1330,8 @@ async def edit_job_application(application_id):
 
 @app.route("/delete-job-application/<int:application_id>", methods=["DELETE"])
 async def delete_job_application(application_id):
+    # Retrieve the user_id from the request body
+    user_id = request.json.get('user_id')
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
     os.makedirs(user_embeddings_directory, exist_ok=True)
@@ -1324,8 +1339,9 @@ async def delete_job_application(application_id):
     db = await get_db()
 
     cursor = await db.cursor()
+    # Update the SQL DELETE statement to delete the record that matches both user_id and application_id
     await cursor.execute(
-        "DELETE FROM job_applications WHERE id = ?", (application_id,)
+        "DELETE FROM job_applications WHERE id = ? AND user_id = ?", (application_id, user_id)
     )
     await db.commit()
 
@@ -1443,11 +1459,12 @@ async def create_resume_version():
     resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
     resume_docs_str = "\n\n".join(resume_docs_texts_flat)
 
-    template_questions_base = f"""Below is relevant information from a user's resume and the description of a job they are applying to. Please provide 5 recommendations to the user on how they can update their resume to increase their chances of landing an interview. Please return the questions in the following format: ['recommendation1','recommendation2','recommendation3','recommendation4','recommendation5']
-        
+    template_questions_base = f"""Below is relevant information from a user's resume and the description of a job they are applying to. Please provide 5 recommendations to the user on how they can update their resume to increase their chances of landing an interview. Please return the recommendations separated by newlines.
+            
     Job Description Information: {jobs_docs_str}"""
 
     template_final = template_questions_base + """Resume Information: {context} """
+
 
 
     chain = LLMChain(
@@ -1459,9 +1476,8 @@ async def create_resume_version():
         recommendation_response = chain(resume_docs_str)
         print(recommendation_response)
         # Convert the questions string into a Python list
-        recommendation_string = recommendation_response['text'].replace("'", "\"")
-        escaped_recommendation_string = recommendation_string.replace("\n", "\\n")  # Replace newline characters with "\\n"
-        recommendation_list = json.loads(escaped_recommendation_string)  # Use the escaped string to parse the JSON
+        recommendation_string = recommendation_response['text']
+        recommendation_list = [re.sub(r'^\d+\.\s*', '', i) for i in recommendation_string.split('\n')]
 
         await cursor.execute(
             "INSERT INTO resume_versions (user_id, job_app_id, version_name) VALUES (?, ?, ?)",

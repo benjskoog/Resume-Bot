@@ -14,7 +14,7 @@ const JobApplications = () => {
   const { user, setUser, logout } = useContext(UserContext);
   const navigate = useNavigate();
 
-  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   const handleSave = async (updatedApp) => {
     setLoading(true);

@@ -8,7 +8,7 @@ function ForgotPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+      const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
       const response = await axios.post(`${backendUrl}/forgot-password`, { email });
       setMessage(response.data.message);
     } catch (error) {

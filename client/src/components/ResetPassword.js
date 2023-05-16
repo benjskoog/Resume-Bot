@@ -13,7 +13,7 @@ function ResetPassword() {
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
     const token = searchParams.get('token');
-    const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+    const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
   
     const handleSubmit = async (e) => {
       e.preventDefault();

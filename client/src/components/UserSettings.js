@@ -11,7 +11,7 @@ function UserSettings() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   const handleCheckboxChange = () => {
     setShowPasswordFields(!showPasswordFields);

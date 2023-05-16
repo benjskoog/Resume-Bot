@@ -4,10 +4,11 @@ import axios from 'axios';
 
 const ChatHistory = ({ userId, onSubmit, clearChatState }) => {
     const [chats, setChats] = useState([]);
+    const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
+
 
     async function fetchChats() {
       try {
-        const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
         const response = await axios.get(`${backendUrl}/get-table-data/chat`, {
           params: { user_id: userId },
         });
@@ -22,7 +23,6 @@ const ChatHistory = ({ userId, onSubmit, clearChatState }) => {
       e.preventDefault();
       e.stopPropagation();
       try {
-        const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
         const response = await axios.delete(
           `${backendUrl}/delete-row/chat/${chatId}`,
           { params: { user_id: userId } }

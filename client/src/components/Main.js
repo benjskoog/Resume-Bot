@@ -25,7 +25,7 @@ const Main = React.forwardRef((props, ref) => {
   const [linkedIn, setLinkedIn] = useState({});
   const chatRef = useRef();
 
-  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   const clearMainState = () => {
     setResume({});

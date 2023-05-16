@@ -18,7 +18,7 @@ function DataSources({ onBack }) {
   useEffect(() => {
     async function fetchData() {
       try {
-        const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+        const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
         const response = await axios.get(`${backendUrl}/get-database-tables`);
         setTables(response.data.tables);
         console.log(response.data)

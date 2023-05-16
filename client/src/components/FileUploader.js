@@ -97,7 +97,7 @@ const FileUploader = ({ setIsModalOpen, closeModal }) => {
     formData.append("id", user.id);
   
     try {
-      const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+      const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
       const response = await axios.post(`${backendUrl}/upload-resume`, formData, {
         headers: {
           "Content-Type": "multipart/form-data",

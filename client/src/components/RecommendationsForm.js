@@ -11,7 +11,7 @@ function RecommendationsForm({ jobAppId, resumeVersionId }) {
     const [triggerUpdate, setTriggerUpdate] = useState(false);
     const { user, setUser, logout } = useContext(UserContext);
 
-    const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+    const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
     const generateRecomendations = async () => {
         setLoading(true);

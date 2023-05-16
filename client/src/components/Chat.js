@@ -15,6 +15,8 @@ const Chat = React.forwardRef((props, ref) => {
   const { chatId } = useParams();
   const { user, loading } = useContext(UserContext);
 
+  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
+
   const clearChatState = () => {
     setMessages([]);
     setFetchingResponse(false);
@@ -28,7 +30,6 @@ const Chat = React.forwardRef((props, ref) => {
     console.log(chatId);
     setChat(chatId)
     try {
-      const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
       const response = await axios.get(`${backendUrl}/get-messages?user_id=${user.id}&chat_id=${chatId}`);
       const fetchedMessages = response.data;
       console.log(fetchedMessages)
@@ -39,7 +40,6 @@ const Chat = React.forwardRef((props, ref) => {
   };
   
   const handleFormSubmit = async (formValues, clearForm) => {
-    const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
     const proxyEndpoint = `${backendUrl}/gpt-api-call`;
     const data = {
       id: user.id,

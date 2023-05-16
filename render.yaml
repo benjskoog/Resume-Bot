@@ -1,0 +1,10 @@
+services:
+- type: web
+  name: resume-bot
+  env: static
+  buildCommand: npm run build
+  root: client
+  staticPublishPath: build
+  routes:
+  - src: /.*
+    dest: index.html

@@ -8,7 +8,7 @@ function QuestionModal({ question, closeModal, setIsModalOpen, submit }) {
   const [loading, setLoading] = useState(false);
   const { user, setUser, logout } = useContext(UserContext);
 
-  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   const handleSubmit = async (e) => {
     e.preventDefault();

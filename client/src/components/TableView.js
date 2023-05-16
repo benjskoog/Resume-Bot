@@ -8,7 +8,7 @@ function TableView() {
   const [tableData, setTableData] = useState([]);
   const { tableName } = useParams();
   const { user } = useContext(UserContext);
-  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
 async function deleteRow(rowId) {
   try {

@@ -14,7 +14,7 @@ const ResumeOptimizer = () => {
   const [itemsPerPage, setItemsPerPage] = useState(4); // Change this to your desired number of items per page
   const { user, setUser, logout } = useContext(UserContext);
   const navigate = useNavigate();
-  const backendUrl = process.env.BACKEND_URL|| "http://localhost:3001";
+  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   const handleSave = async (updatedResume) => {
     setLoading(true);

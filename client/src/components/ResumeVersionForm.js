@@ -3,17 +3,17 @@ import UserContext from './UserContext';
 import Select from 'react-select';
 import RecommendationsForm from './RecommendationsForm';
 
-const ResumeVersionForm = ({ versionExists, currentVersion, handleSave, showForm, jobApplications }) => {
+const ResumeVersionForm = ({ versionExists, currentVersion, handleSave, showForm, jobs }) => {
   const [form, setForm] = useState(currentVersion);
   const { user, setUser, logout } = useContext(UserContext);
   const [showFields, setShowFields] = useState(true);
   const [showRecommendations, setShowRecommendations] = useState(true);
-  const options = jobApplications.map(app => ({
+  const options = jobs.map(app => ({
     value: app.id,
     label: `${app.job_title} - ${app.company_name}`,
   }));
   const [selectedOption, setSelectedOption] = useState(
-    options.find(option => option.value === form.job_app_id) || options[0]
+    options.find(option => option.value === form.job_id) || options[0]
   );
 
   const handleChange = (e) => {
@@ -35,13 +35,13 @@ const ResumeVersionForm = ({ versionExists, currentVersion, handleSave, showForm
 
   const handleOptionChange = (selectedOption) => {
     setSelectedOption(selectedOption);
-    setForm({ ...form, job_app_id: selectedOption.value });
+    setForm({ ...form, job_id: selectedOption.value });
   };
   
 
   useEffect(() => {
-    if (!form.job_app_id) {
-      setForm({ ...form, job_app_id: options[0]?.value });
+    if (!form.job_id) {
+      setForm({ ...form, job_id: options[0]?.value });
     }
     console.log(currentVersion);
   }, []);
@@ -80,12 +80,12 @@ const ResumeVersionForm = ({ versionExists, currentVersion, handleSave, showForm
                 <input type="text" id="version_name" name="version_name" value={form.version_name} onChange={handleChange} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="" required></input>
             </div>
         <div className="mb-6">
-        <label htmlFor="jobApps" className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Job Applications</label>
+        <label htmlFor="jobApps" className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Saved Jobs</label>
         <Select
             options={options}
             value={selectedOption}
             onChange={handleOptionChange}
-            placeholder="Job Applications..."
+            placeholder="Saved Jobs..."
             className="w-full mb-4 mr-4 text-sm leading-normal"
             theme={(theme) => ({
                 ...theme,

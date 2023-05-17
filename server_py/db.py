@@ -41,14 +41,14 @@ async def setup_db():
             CREATE TABLE IF NOT EXISTS interview_questions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
-                job_app_id INTEGER,
+                job_id INTEGER,
                 question TEXT,
                 answer TEXT,
                 recommendation TEXT,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             );
 
-            CREATE TABLE IF NOT EXISTS job_applications (
+            CREATE TABLE IF NOT EXISTS saved_jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
                 job_title TEXT,
@@ -60,35 +60,25 @@ async def setup_db():
                 FOREIGN KEY (user_id) REFERENCES users (id)
             );
 
-            CREATE TABLE IF NOT EXISTS job_app_sections (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                job_app_id INTEGER,
-                section TEXT,
-                content TEXT,
-                FOREIGN KEY (user_id) REFERENCES users (id),
-                FOREIGN KEY (job_app_id) REFERENCES job_applications (id)
-            );
-
             CREATE TABLE IF NOT EXISTS resume_versions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
-                job_app_id INTEGER,
+                job_id INTEGER,
                 version_name TEXT,
                 version_text TEXT,
                 FOREIGN KEY (user_id) REFERENCES users (id),
-                FOREIGN KEY (job_app_id) REFERENCES job_applications (id)
+                FOREIGN KEY (job_id) REFERENCES job_applications (id)
             );
 
             CREATE TABLE IF NOT EXISTS resume_recommendations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
-                job_app_id INTEGER,
+                job_id INTEGER,
                 version_id TEXT,
                 recommendation TEXT,
                 user_notes TEXT,
                 FOREIGN KEY (user_id) REFERENCES users (id),
-                FOREIGN KEY (job_app_id) REFERENCES job_applications (id),
+                FOREIGN KEY (job_id) REFERENCES job_applications (id),
                 FOREIGN KEY (version_id) REFERENCES resume_versions (id)
             );
 
@@ -184,8 +174,7 @@ async def drop_all_tables():
             DROP TABLE IF EXISTS linkedIn;
             DROP TABLE IF EXISTS resume_recommendations;
             DROP TABLE IF EXISTS resume_versions;
-            DROP TABLE IF EXISTS job_app_sections;
-            DROP TABLE IF EXISTS job_applications;
+            DROP TABLE IF EXISTS saved_jobs;
             DROP TABLE IF EXISTS interview_questions;
             DROP TABLE IF EXISTS resume;
             DROP TABLE IF EXISTS messages;
@@ -202,3 +191,4 @@ async def drop_all_tables():
 
 # Initialize the database when the module is loaded
 asyncio.run(setup_db())
+asyncio.run(drop_all_tables())

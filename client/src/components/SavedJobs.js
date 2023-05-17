@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useLocation, useNavigate  } from 'react-router-dom';
-import JobApplicationsForm from './JobApplicationsForm';
+import NewJobForm from './NewJobForm';
 import UserContext from './UserContext';
 import axios from 'axios';
 
-const JobApplications = () => {
-  const [applications, setApplications] = useState([]);
-  const [selectedApp, setSelectedApp] = useState(null);
+const SavedJobs = () => {
+  const [jobs, setJobs] = useState([]);
+  const [selectedJob, setSelectedJob] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -16,54 +16,54 @@ const JobApplications = () => {
 
   const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
-  const handleSave = async (updatedApp) => {
+  const handleSave = async (updatedJob) => {
     setLoading(true);
     try {
-      if (selectedApp === null) {
-        // Create a new job application
-        const response = await axios.post(`${backendUrl}/create-job-application`, {
+      if (selectedJob === null) {
+        // Create a new job
+        const response = await axios.post(`${backendUrl}/create-job`, {
           user_id: user.id,
-          job_title: updatedApp.job_title,
-          company_name: updatedApp.company_name,
-          job_description: updatedApp.job_description,
-          status: updatedApp.status,
-          post_url: updatedApp.post_url
+          job_title: updatedJob.job_title,
+          company_name: updatedJob.company_name,
+          job_description: updatedJob.job_description,
+          status: updatedJob.status,
+          post_url: updatedJob.post_url
         });
   
-        const newApp = response.data;
-        setApplications([...applications, newApp]);
+        const newJob = response.data;
+        setJobs([...jobs, newJob]);
       } else {
-        // Edit an existing job application
-        const response = await axios.put(`${backendUrl}/edit-job-application/${applications[selectedApp].id}`, {
+        // Edit an existing job
+        const response = await axios.put(`${backendUrl}/edit-job/${jobs[selectedJob].id}`, {
           user_id: user.id,
-          job_title: updatedApp.job_title,
-          company_name: updatedApp.company_name,
-          job_description: updatedApp.job_description,
-          status: updatedApp.status,
-          post_url: updatedApp.post_url
+          job_title: updatedJob.job_title,
+          company_name: updatedJob.company_name,
+          job_description: updatedJob.job_description,
+          status: updatedJob.status,
+          post_url: updatedJob.post_url
         });
   
         // Use the spread operator to create a new object with the updated properties
-        const editedApp = {
-          ...applications[selectedApp],
-          job_title: updatedApp.job_title,
-          company_name: updatedApp.company_name,
-          job_description: updatedApp.job_description,
-          status: updatedApp.status,
-          post_url: updatedApp.post_url
+        const editedJob = {
+          ...jobs[selectedJob],
+          job_title: updatedJob.job_title,
+          company_name: updatedJob.company_name,
+          job_description: updatedJob.job_description,
+          status: updatedJob.status,
+          post_url: updatedJob.post_url
         };
   
-        setApplications(
-          applications.map((app, index) =>
-            index === selectedApp ? editedApp : app
+        setJobs(
+          jobs.map((job, index) =>
+            index === selectedJob ? editedJob : job
           )
         );
       }
-      setSelectedApp(null);
+      setSelectedJob(null);
       setShowForm(false);
       setLoading(false);
     } catch (error) {
-      console.error('Error saving job application:', error);
+      console.error('Error saving job:', error);
     }
   };
 
@@ -71,31 +71,31 @@ const JobApplications = () => {
     try {
       const response = await axios({
         method: 'delete',
-        url: `${backendUrl}/delete-job-application/${applications[index].id}`,
+        url: `${backendUrl}/delete-job/${jobs[index].id}`,
         data: {
           user_id: user.id,
         },
       });
   
       if (response.data.success) {
-        setApplications(applications.filter((_, i) => i !== index));
+        setJobs(jobs.filter((_, i) => i !== index));
       } else {
-        console.error("Error deleting job application");
+        console.error("Error deleting job");
       }
     } catch (error) {
-      console.error("Error deleting job application:", error);
+      console.error("Error deleting job:", error);
     }
   };
 
   const handleEdit = (index) => {
-    setSelectedApp(index);
+    setSelectedJob(index);
     setShowForm(true);
 
   };
 
-  const handleNewApp = () => {
+  const handleNewJob = () => {
     setShowForm(true);
-    setSelectedApp(null);
+    setSelectedJob(null);
   };
 
   const statusClass = (status) => {
@@ -127,24 +127,24 @@ const JobApplications = () => {
 
   useEffect(() => {
     setLoading(true);
-    const fetchApplications = async () => {
+    const fetchJobs = async () => {
       try {
-        const response = await axios.post(`${backendUrl}/get-job-applications`, {
+        const response = await axios.post(`${backendUrl}/get-jobs`, {
           user_id: user.id,
           page: currentPage,
           itemsPerPage: itemsPerPage,
         });
         const data = response.data;
         console.log(data);
-        setApplications(data.applications);
+        setJobs(data.jobs);
         setLoading(false);
-        console.log(applications)
+        console.log(jobs)
       } catch (error) {
-        console.error('Error fetching job applications:', error);
+        console.error('Error fetching jobs:', error);
       }
     };    
   
-    fetchApplications();
+    fetchJobs();
   }, [currentPage]);
 
   useEffect(() => {
@@ -162,16 +162,16 @@ const JobApplications = () => {
     };
   }, []);
 
-  const newApplication = { job_title: '', company_name: '', job_description: '', post_url: ''};
-  const currentApp = selectedApp === null ? newApplication : applications[selectedApp];
-  const appExists = selectedApp === null ? null : applications[selectedApp];
+  const newSavedJob = { job_title: '', company_name: '', job_description: '', post_url: ''};
+  const currentJob = selectedJob === null ? newSavedJob : jobs[selectedJob];
+  const jobExists = selectedJob === null ? null : jobs[selectedJob];
 
   return (
     <>
       {showForm ? (
-        <JobApplicationsForm
-          appExists={appExists}
-          currentApp={currentApp}
+        <NewJobForm
+          jobExists={jobExists}
+          currentJob={currentJob}
           handleSave={handleSave}
           showForm={setShowForm}
         />
@@ -180,15 +180,15 @@ const JobApplications = () => {
     <div className="container mx-auto px-4 sm:px-8">
         <div className="py-8">
             <div>
-                <h2 className="text-2xl font-semibold leading-tight">Track your job applications</h2>
+                <h2 className="text-2xl font-semibold leading-tight">Track your saved jobs</h2>
             </div>
             <button
-                onClick={handleNewApp}
+                onClick={handleNewJob}
                 type="button"
                 className="mb-4 mt-8 flex-shrink-0 inline-block rounded bg-blue-500 px-8 pb-2.5 pt-2.5 text-xs font-medium uppercase leading-normal text-white shadow-[0_4px_9px_-4px_#3b71ca] transition duration-150 ease-in-out hover:bg-primary-600 hover:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] focus:bg-primary-600 focus:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] focus:outline-none focus:ring-0 active:bg-primary-700 active:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] dark:shadow-[0_4px_9px_-4px_rgba(59,113,202,0.5)] dark:hover:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)] dark:focus:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)] dark:active:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)]"
                 data-te-ripple-init
                 data-te-ripple-color="light">
-                New Application
+                New Job
             </button>
             <div className="-mx-4 sm:-mx-8 px-4 sm:px-8 py-4 overflow-x-auto">
               <div className="inline-block min-w-full shadow rounded-lg overflow-hidden">
@@ -228,39 +228,39 @@ const JobApplications = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {applications.map((application, index) => (
-                      <tr key={application.id}>
+                    {jobs.map((job, index) => (
+                      <tr key={job.id}>
                         <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                         <button
                             className="text-left text-blue-600 hover:text-blue-800 focus:outline-none"
                             onClick={() => handleEdit(index)}
                         >
                             <p className="text-gray-900 text-blue-900 whitespace-no-wrap">
-                            {application.job_title}
+                            {job.job_title}
                             </p>
                         </button>
                         </td>
                         <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                           <p className="text-gray-900 whitespace-no-wrap">
-                            {application.company_name}
+                            {job.company_name}
                           </p>
                         </td>
                         <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                           <p className="text-gray-900 truncate-5-lines max-w-xl">
-                            {application.job_description}
+                            {job.job_description}
                           </p>
                         </td>
                         <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                                     <span
-                                        className={`relative inline-block px-3 py-1 font-semibold text-${application.status && statusClass(application.status)}-900 leading-tight`}>
+                                        className={`relative inline-block px-3 py-1 font-semibold text-${job.status && statusClass(job.status)}-900 leading-tight`}>
                                         <span aria-hidden
-                                            className={`absolute inset-0 opacity-50 bg-${application.status && statusClass(application.status)}-200 rounded-full`}></span>
-                                        <span className="relative whitespace-nowrap">{application.status}</span>
+                                            className={`absolute inset-0 opacity-50 bg-${job.status && statusClass(job.status)}-200 rounded-full`}></span>
+                                        <span className="relative whitespace-nowrap">{job.status}</span>
                                     </span>
                                 </td>
                         <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                           <p className="text-gray-900 whitespace-no-wrap">
-                            {application.date_added}
+                            {job.date_added}
                           </p>
                         </td>
                         <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
@@ -319,4 +319,4 @@ const JobApplications = () => {
   );
 };
 
-export default JobApplications;
+export default SavedJobs;

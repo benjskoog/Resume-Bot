@@ -4,11 +4,11 @@ import ResumeVersionForm from './ResumeVersionForm';
 import UserContext from './UserContext';
 import axios from 'axios';
 
-const ResumeVersionCard = ({ jobAppId }) => {
+const ResumeVersionCard = ({ jobId }) => {
   const [resumes, setResumes] = useState([]);
   const [selectedResume, setSelectedResume] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [jobApplications, setJobApplications] = useState([]);
+  const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const { user, setUser, logout } = useContext(UserContext);
   const navigate = useNavigate();
@@ -20,7 +20,7 @@ const ResumeVersionCard = ({ jobAppId }) => {
         // Create a new job resume
         const response = await axios.post(`${backendUrl}/create-resume-version`, {
           user_id: user.id,
-          job_app_id: updatedResume.job_app_id,
+          job_id: updatedResume.job_id,
           version_name: updatedResume.version_name,
         });
   
@@ -30,14 +30,14 @@ const ResumeVersionCard = ({ jobAppId }) => {
         // Edit an existing job resume
         const response = await axios.put(`${backendUrl}/edit-resume-version/${resumes[selectedResume].id}`, {
             user_id: user.id,
-            job_app_id: updatedResume.job_app_id,
+            job_id: updatedResume.job_id,
             version_name: updatedResume.version_name,
         });
   
         // Use the spread operator to create a new object with the updated properties
         const editedVersion = {
           ...resumes[selectedResume],
-          job_app_id: updatedResume.job_app_id,
+          job_id: updatedResume.job_id,
           version_name: updatedResume.version_name,
           recommendation: updatedResume.recommendation
         };
@@ -83,7 +83,7 @@ const ResumeVersionCard = ({ jobAppId }) => {
       try {
         const response = await axios.post(`${backendUrl}/get-resume-versions`, {
           user_id: user.id,
-          job_app_id: jobAppId
+          job_id: jobId
         });
         const data = response.data;
         console.log(data);
@@ -99,22 +99,22 @@ const ResumeVersionCard = ({ jobAppId }) => {
   }, []);
 
   useEffect(() => {
-    async function fetchJobApplications() {
+    async function fetchJobs() {
             try {
-              const response = await axios.post(`${backendUrl}/get-job-applications`, {
+              const response = await axios.post(`${backendUrl}/get-jobs`, {
                 user_id: user.id,
                 page: 1,
                 itemsPerPage: 50,
               });
               const data = response.data;
               console.log(data);
-              setJobApplications(data.applications);
-              console.log(jobApplications)
+              setJobs(data.jobs);
+              console.log(jobs)
             } catch (error) {
-              console.error('Error fetching job applications:', error);
+              console.error('Error fetching jobs:', error);
             }  
     }
-    fetchJobApplications();
+    fetchJobs();
   }, []);
 
   useEffect(() => {
@@ -132,7 +132,7 @@ const ResumeVersionCard = ({ jobAppId }) => {
     };
   }, []);
 
-  const newResume = { job_app_id: '', company_name: '', version_name: ''};
+  const newResume = { job_id: '', company_name: '', version_name: ''};
   const currentVersion = selectedResume === null ? newResume : resumes[selectedResume];
   const versionExists = selectedResume === null ? null : resumes[selectedResume];
 
@@ -141,7 +141,7 @@ const ResumeVersionCard = ({ jobAppId }) => {
       {showForm ? (
         <ResumeVersionForm
           versionExists={versionExists}
-          jobApplications={jobApplications}
+          jobs={jobs}
           currentVersion={currentVersion}
           handleSave={handleSave}
           showForm={setShowForm}

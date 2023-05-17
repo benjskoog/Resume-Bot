@@ -35,7 +35,7 @@ function QuestionModal({ question, closeModal, setIsModalOpen, submit }) {
       question_id: question.id,
       question_answer: question.answer,
       query: question.question,
-      job_app_id: question.job_app_id,
+      job_id: question.job_id,
       type: "help"
     };
 

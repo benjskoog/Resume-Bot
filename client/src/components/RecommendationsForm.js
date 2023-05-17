@@ -3,7 +3,7 @@ import axios from 'axios';
 import UserContext from './UserContext';
 import Select from 'react-select';
 
-function RecommendationsForm({ jobAppId, resumeVersionId }) {
+function RecommendationsForm({ jobId, resumeVersionId }) {
     const [recommendations, setRecommendations] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedRecommendation, setSelectedRecommendation] = useState(null);
@@ -15,9 +15,9 @@ function RecommendationsForm({ jobAppId, resumeVersionId }) {
 
     const generateRecomendations = async () => {
         setLoading(true);
-        console.log(jobAppId)
+        console.log(jobId)
         try {
-          const response = await axios.post(`${backendUrl}/generate-recommendations`, { user_id: user.id, version_id: resumeVersionId, job_app_id: jobAppId});
+          const response = await axios.post(`${backendUrl}/generate-recommendations`, { user_id: user.id, version_id: resumeVersionId, job_id: jobId});
           console.log("Response data:", response.data);
           const recommendationsArray = response.data.recommendations;
           setRecommendations(prevRecommendations => [...prevRecommendations, ...recommendationsArray]);
@@ -32,7 +32,7 @@ function RecommendationsForm({ jobAppId, resumeVersionId }) {
         useEffect(() => {
             async function fetchRecommendations() {
               setLoading(true);
-              console.log(jobAppId)
+              console.log(jobId)
               console.log(resumeVersionId)
               try {
                 const response = await axios.post(`${backendUrl}/get-recommendations`, {

@@ -5,8 +5,8 @@ import InterviewQuestionsForm from './InterviewQuestionsForm';
 import RecommendationsForm from './RecommendationsForm';
 import ResumeVersionCard from './ResumeVersionCard';
 
-const JobApplicationsForm = ({ appExists, currentApp, handleSave, showForm }) => {
-  const [form, setForm] = useState(currentApp);
+const NewJobForm = ({ jobExists, currentJob, handleSave, showForm }) => {
+  const [form, setForm] = useState(currentJob);
   const { user, setUser, logout } = useContext(UserContext);
   const [showFields, setShowFields] = useState(true);
   const [showInterviewQuestions, setShowInterviewQuestions] = useState(true);
@@ -24,7 +24,7 @@ const JobApplicationsForm = ({ appExists, currentApp, handleSave, showForm }) =>
     const { name, value } = e.target;
     setForm({ ...form, [name]: value });
     console.log(form)
-    console.log(currentApp)
+    console.log(currentJob)
   };
 
   const backButton = () => {
@@ -47,7 +47,7 @@ const JobApplicationsForm = ({ appExists, currentApp, handleSave, showForm }) =>
     if (!form.status) {
       setForm({ ...form, status: options[0].label });
     }
-    console.log(currentApp)
+    console.log(currentJob)
   }, []);
 
   return (
@@ -58,12 +58,12 @@ const JobApplicationsForm = ({ appExists, currentApp, handleSave, showForm }) =>
         data-te-ripple-init
         data-te-ripple-color="light"
         >
-        Back to Applications
+        Back to Jobs
     </button>
     <div className="flex flex-col items-center max-w-full mt-2">
         <div className="w-full max-w-6xl rounded-t-xl border border-gray-300 bg-gray-100">
             <div onClick={() => setShowFields(!showFields)} className="px-4 py-4 cursor-pointer flex flex-row justify-between items-center border-b border-gray-300">
-                <p className="text-2xl font-semibold text-gray-600">Application Details</p>
+                <p className="text-2xl font-semibold text-gray-600">Job Details</p>
                 <button>
                             {showFields ? (
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
@@ -135,7 +135,7 @@ const JobApplicationsForm = ({ appExists, currentApp, handleSave, showForm }) =>
     </div>
     )}
     </div>
-    {appExists &&
+    {jobExists &&
     <div className="w-full max-w-6xl border border-gray-300 bg-gray-100">
         <div onClick={() => setShowInterviewQuestions(!showInterviewQuestions)} className="px-4 py-4 cursor-pointer flex flex-row justify-between items-center border-b border-gray-300">
                 <p className="text-2xl font-semibold text-gray-600">Interview Questions</p>
@@ -151,11 +151,11 @@ const JobApplicationsForm = ({ appExists, currentApp, handleSave, showForm }) =>
                         )}
                 </button>
             </div>
-        {showInterviewQuestions && <InterviewQuestionsForm jobApp={true} jobAppId={currentApp.id} />}
+        {showInterviewQuestions && <InterviewQuestionsForm job={true} jobId={currentJob.id} />}
         </div>
     }
     {/*
-    {appExists &&
+    {jobExists &&
     <div className="w-full max-w-6xl border border-gray-300 bg-gray-100">
         <div onClick={() => setShowRecommendations(!showRecommendations)} className="px-4 py-4 cursor-pointer flex flex-row justify-between items-center border-b border-gray-300">
                 <p className="text-2xl font-semibold text-gray-600">Resume Version</p>
@@ -171,7 +171,7 @@ const JobApplicationsForm = ({ appExists, currentApp, handleSave, showForm }) =>
                         )}
                 </button>
             </div>
-        {showRecommendations && <ResumeVersionCard jobAppId={currentApp.id} />}
+        {showRecommendations && <ResumeVersionCard jobId={currentJob.id} />}
         </div>
     }
     */}
@@ -180,4 +180,4 @@ const JobApplicationsForm = ({ appExists, currentApp, handleSave, showForm }) =>
   );
 };
 
-export default JobApplicationsForm;
+export default NewJobForm;

@@ -13,9 +13,9 @@ import TopBar from './TopBar';
 import UserSettings from './UserSettings';
 import ForgotPassword from './ForgotPassword';
 import ResetPassword from "./ResetPassword";
-import JobApplications from "./JobApplications";
+import SavedJobs from "./SavedJobs";
 import axios from "axios";
-import JobApplicationsForm from "./JobApplicationsForm";
+import NewJobForm from "./NewJobForm";
 import ResumeOptimizer from "./ResumeOptimizer";
 
 const Main = React.forwardRef((props, ref) => {
@@ -78,8 +78,8 @@ const Main = React.forwardRef((props, ref) => {
               <Route path="/chat" element={<Chat ref={chatRef} />} />
               <Route path="/chat/:chatId" element={<Chat ref={chatRef} />} />
               <Route path="/datasources" element={<DataSources />} />
-              <Route path="/job-applications" element={<JobApplications />} />
-              <Route path="/job-application-form" element={<JobApplicationsForm />} />
+              <Route path="/saved-jobs" element={<SavedJobs />} />
+              <Route path="/new-job-form" element={<NewJobForm />} />
               <Route path="/resume-optimizer" element={<ResumeOptimizer />} />
               <Route path="/interview-questions-form" element={<InterviewQuestionsForm />} />
               <Route path="/datasources/:tableName" element={<TableView />} />

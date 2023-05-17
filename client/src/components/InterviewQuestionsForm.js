@@ -4,7 +4,7 @@ import QuestionModal from './QuestionModal';
 import UserContext from './UserContext';
 import Select from 'react-select';
 
-function InterviewQuestionsForm({ jobApp, jobAppId }) {
+function InterviewQuestionsForm({ job, jobId }) {
     const [questions, setQuestions] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedQuestion, setSelectedQuestion] = useState(null);
@@ -24,7 +24,7 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
     const generateQuestions = async () => {
         setLoading(true);
         try {
-          const response = await axios.post(`${backendUrl}/generate-interview-questions`, { user_id: user.id, job_app_id: jobAppId, type: selectedOption.value });
+          const response = await axios.post(`${backendUrl}/generate-interview-questions`, { user_id: user.id, job_id: jobId, type: selectedOption.value });
           console.log("Response data:", response.data);
           const questionsArray = response.data.questions;
           setQuestions(prevQuestions => [...prevQuestions, ...questionsArray]);
@@ -68,7 +68,7 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
               try {
                 const response = await axios.post(`${backendUrl}/get-interview-questions`, {
                   user_id: user.id,
-                  job_app_id: jobAppId,
+                  job_id: jobId,
                 });
                 console.log("Response data:", response.data);
                 const questionsArray = response.data.questions.map(question => question);
@@ -127,8 +127,8 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
                   <div className="w-12 h-12 mt-4 mb-4 rounded-full animate-spin border-y-2 border-solid border-gray-900 border-t-transparent"></div>
               </div>
               )}
-    <div className={`${jobApp ? "bg-white" : "bg-gray-200 overflow-y-auto h-[calc(100vh-72px)]"} p-4 max-w-full flex flex-col items-center`}>
-      <div className={`flex ${jobApp ? "max-w-6xl" : "max-w-7xl"} mt-2 w-full`}>
+    <div className={`${job ? "bg-white" : "bg-gray-200 overflow-y-auto h-[calc(100vh-72px)]"} p-4 max-w-full flex flex-col items-center`}>
+      <div className={`flex ${job ? "max-w-6xl" : "max-w-7xl"} mt-2 w-full`}>
       <Select
         options={options}
         value={selectedOption}
@@ -154,10 +154,10 @@ function InterviewQuestionsForm({ jobApp, jobAppId }) {
         Generate Questions
       </button>
       </div>
-      <div className={`flex flex-col ${jobApp ? "max-w-6xl" : "max-w-7xl"} mt-2 w-full`}>
-          <ul className={`${jobApp ? "max-w-6xl" : "max-w-7xl"}`}>
+      <div className={`flex flex-col ${job ? "max-w-6xl" : "max-w-7xl"} mt-2 w-full`}>
+          <ul className={`${job ? "max-w-6xl" : "max-w-7xl"}`}>
         {questions
-            .filter((question) => !jobApp || question.job_app_id === jobAppId)
+            .filter((question) => !job || question.job_id === jobId)
             .map((question, index) => (
           <li key={index} className="mb-2">
             <div className="block rounded-lg bg-white p-6 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] dark:bg-neutral-700">

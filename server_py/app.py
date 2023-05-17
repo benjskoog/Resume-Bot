@@ -44,7 +44,7 @@ from email_sending import send_email
 from typing import Optional
 import pdfplumber
 import mimetypes
-
+from job_search import search_jobs
 
 app = Flask(__name__)
 CORS(app)
@@ -596,7 +596,7 @@ async def get_answer_help():
     user_id = form_values["id"]
     question_id = form_values["question_id"]
     question_answer = form_values.get("question_answer")
-    job_app_id = form_values.get("job_app_id")
+    job_id = form_values.get("job_id")
     print(user_id)
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
@@ -658,12 +658,12 @@ async def get_answer_help():
 
         Please answer the question from the user's perspective and provide a recommendation to the user on what they need to include to improve the answer you provided. Your response must be in JSON with the following properties: "answer" : "", "recommendation": "". Relevant information is provided below. Do not make anything up.\n"""
 
-    if job_app_id:
+    if job_id:
 
         job_docs = chroma_collection_jobs.query(
             query_texts=[query],
             n_results=2,
-            where={"job_app_id": job_app_id}  # directly convert job_app_id to string
+            where={"job_id": job_id}  # directly convert job_id to string
         )
 
         job_docs_texts = job_docs["documents"]
@@ -712,7 +712,7 @@ async def generate_interview_questions():
     form_values = request.json
     print(form_values)
     user_id = form_values["user_id"]
-    job_app_id = form_values.get("job_app_id")
+    job_id = form_values.get("job_id")
     question_type = form_values["type"]
 
     chat = ChatOpenAI(
@@ -762,19 +762,19 @@ async def generate_interview_questions():
     resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
     resume_docs_str = "\n\n".join(resume_docs_texts_flat)
  
-    if job_app_id:
+    if job_id:
 
         resume = resume_docs_str
 
-        await cursor.execute(f"SELECT * FROM job_applications WHERE id = ? AND user_id = ?", (job_app_id, user_id,))
+        await cursor.execute(f"SELECT * FROM saved_jobs WHERE id = ? AND user_id = ?", (job_id, user_id,))
 
-        job_app = await cursor.fetchall()
+        job = await cursor.fetchall()
 
-        print(job_app)
+        print(job)
 
         template_questions_base = f"""Below is a user's resume and the description for a job they are applying to. Please return 3 interview questions {type_string} that they might be asked during an interview for this job. Please return the questions separated by newlines.
         
-        Job Description: {job_app[0][4]}
+        Job Description: {job[0][4]}
         """
 
     else:
@@ -807,8 +807,8 @@ async def generate_interview_questions():
         # Save the questions to the interview_questions table
         for question in questions_list:
             await cursor.execute(
-                "INSERT INTO interview_questions (user_id, job_app_id, question) VALUES (?, ?, ?)",
-                (user_id, job_app_id, question),
+                "INSERT INTO interview_questions (user_id, job_id, question) VALUES (?, ?, ?)",
+                (user_id, job_id, question),
             )
 
         # Commit the changes to the database
@@ -825,13 +825,13 @@ async def get_interview_questions():
     db = await get_db()
     data = request.json
     user_id = data["user_id"]
-    job_app_id = data.get("job_app_id")  # Get job_app_id if it exists in the request
+    job_id = data.get("job_id")  # Get job_id if it exists in the request
 
     cursor = await db.cursor()
 
-    if job_app_id:
-        # Filter interview questions by user_id and job_app_id
-        await cursor.execute("SELECT * FROM interview_questions WHERE user_id = ? AND job_app_id = ?", (user_id, job_app_id))
+    if job_id:
+        # Filter interview questions by user_id and job_id
+        await cursor.execute("SELECT * FROM interview_questions WHERE user_id = ? AND job_id = ?", (user_id, job_id))
     else:
         # Filter interview questions only by user_id
         await cursor.execute("SELECT * FROM interview_questions WHERE user_id = ?", (user_id,))
@@ -844,7 +844,7 @@ async def get_interview_questions():
             "user_id": question[1],
             "question": question[3],
             "answer": question[4],
-            "job_app_id": question[2],
+            "job_id": question[2],
             "recommendation": question[5]
         }
         for question in interview_questions
@@ -1020,7 +1020,7 @@ async def generate_recommendations():
     db = await get_db()
     data = request.json
     user_id = data["user_id"]
-    job_app_id = data.get("job_app_id")
+    job_id = data.get("job_id")
     version_id = data.get("version_id")
 
     chat = ChatOpenAI(
@@ -1033,15 +1033,15 @@ async def generate_recommendations():
 
     cursor = await db.cursor()
 
-    await cursor.execute(f"SELECT * FROM job_applications WHERE id = ? AND user_id = ?", (job_app_id, user_id,))
+    await cursor.execute(f"SELECT * FROM saved_jobs WHERE id = ? AND user_id = ?", (job_id, user_id,))
 
-    job_app = await cursor.fetchall()
+    job = await cursor.fetchall()
 
     await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
     
     resume = await cursor.fetchall()
 
-    await cursor.execute(f"SELECT * FROM resume_recommendations WHERE user_id = ? AND job_app_id = ?", (user_id, job_app_id,))
+    await cursor.execute(f"SELECT * FROM resume_recommendations WHERE user_id = ? AND job_id = ?", (user_id, job_id,))
 
     existing_recommendations = await cursor.fetchall()
     recommendations_list = [row[2] for row in existing_recommendations]
@@ -1107,8 +1107,8 @@ async def generate_recommendations():
         # Save the questions to the interview_questions table
         for recommendation in recommendation_list:
             await cursor.execute(
-                "INSERT INTO resume_recommendations (user_id, job_app_id, version_id, recommendation) VALUES (?, ?, ?, ?)",
-                (user_id, job_app_id, version_id ,recommendation),
+                "INSERT INTO resume_recommendations (user_id, job_id, version_id, recommendation) VALUES (?, ?, ?, ?)",
+                (user_id, job_id, version_id ,recommendation),
             )
 
         # Commit the changes to the database
@@ -1125,7 +1125,7 @@ async def get_recommendations():
     data = request.json
     user_id = data["user_id"]
     version_id = data.get("version_id")
-    job_app_id = data.get("job_app_id")
+    job_id = data.get("job_id")
 
     print(data)
 
@@ -1138,9 +1138,9 @@ async def get_recommendations():
 
         await cursor.execute("SELECT * FROM resume_recommendations WHERE user_id = ? AND version_id = ?", (user_id, version_id))
 
-    elif job_app_id:
+    elif job_id:
         
-        await cursor.execute("SELECT * FROM resume_recommendations WHERE user_id = ? AND job_app_id = ?", (user_id, job_app_id))
+        await cursor.execute("SELECT * FROM resume_recommendations WHERE user_id = ? AND job_id = ?", (user_id, job_id))
         
     recommendations = await cursor.fetchall()
 
@@ -1179,8 +1179,8 @@ async def delete_recommendation():
         return jsonify(success=False, message="Error deleting the recommendation")
 
 
-@app.route("/get-job-applications", methods=["POST"])
-async def get_job_applications():
+@app.route("/get-jobs", methods=["POST"])
+async def get_jobs():
     db = await get_db()
     data = request.json
     user_id = data["user_id"]
@@ -1188,27 +1188,27 @@ async def get_job_applications():
     items_per_page = int(data.get("itemsPerPage", 10))
 
     cursor = await db.cursor()
-    await cursor.execute("SELECT * FROM job_applications WHERE user_id = ? ORDER BY date_created DESC LIMIT ? OFFSET ?", (user_id, items_per_page, (page - 1) * items_per_page))
-    job_applications = await cursor.fetchall()
+    await cursor.execute("SELECT * FROM saved_jobs WHERE user_id = ? ORDER BY date_created DESC LIMIT ? OFFSET ?", (user_id, items_per_page, (page - 1) * items_per_page))
+    saved_jobs = await cursor.fetchall()
 
-    applications = [
+    jobs = [
         {
-            "id": application[0],
-            "user_id": application[1],
-            "job_title": application[2],
-            "company_name": application[3],
-            "job_description": application[4],
-            "status": application[5],
-            "date_added": application[6],
-            "post_url": application[7],
+            "id": job[0],
+            "user_id": job[1],
+            "job_title": job[2],
+            "company_name": job[3],
+            "job_description": job[4],
+            "status": job[5],
+            "date_added": job[6],
+            "post_url": job[7],
         }
-        for application in job_applications
+        for job in saved_jobs
     ]
 
-    return jsonify(applications=applications, headers=["Job Title/Role", "Company Name", "Job Description", "Status"])
+    return jsonify(jobs=jobs, headers=["Job Title/Role", "Company Name", "Job Description", "Status"])
 
-@app.route("/create-job-application", methods=["POST"])
-async def create_job_application():
+@app.route("/create-job", methods=["POST"])
+async def create_job():
     db = await get_db()
     data = request.json
     user_id = data["user_id"]
@@ -1224,15 +1224,15 @@ async def create_job_application():
 
     cursor = await db.cursor()
     await cursor.execute(
-        "INSERT INTO job_applications (user_id, job_title, company_name, job_description, status, post_url, date_created) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO saved_jobs (user_id, job_title, company_name, job_description, status, post_url, date_created) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (user_id, job_title, company_name, job_description, status, post_url, date_created),
     )
 
     await db.commit()
 
-    application_id = cursor.lastrowid
+    job_id = cursor.lastrowid
 
-    job_app_string = f"""
+    job_string = f"""
     Job Title: {job_title}
 
     Company Name: {company_name}
@@ -1262,12 +1262,12 @@ async def create_job_application():
             length_function = len,
         )
 
-        docs_chunked = text_splitter.create_documents([job_app_string])
+        docs_chunked = text_splitter.create_documents([job_string])
         docs_text = [doc.page_content for doc in docs_chunked]
         print(docs_text)
 
         doc_ids = [str(uuid.uuid4()) for _ in docs_chunked]
-        metadatas = [{"job_app_id": application_id} for _ in docs_chunked]
+        metadatas = [{"job_id": job_id} for _ in docs_chunked]
    
         chroma_client = chromadb.Client(Settings(
             chroma_db_impl="duckdb+parquet",
@@ -1288,12 +1288,12 @@ async def create_job_application():
         )
 
         print(chroma_collection.get(
-            where={"job_app_id": application_id}
+            where={"job_id": job_id}
         ))
 
         return jsonify(
             success=True,
-            id=application_id,
+            id=job_id,
             user_id=user_id,
             job_title=job_title,
             company_name=company_name,
@@ -1308,8 +1308,8 @@ async def create_job_application():
         return jsonify(success=False, message="Error updating answer"), 500
 
 
-@app.route("/edit-job-application/<int:application_id>", methods=["PUT"])
-async def edit_job_application(application_id):
+@app.route("/edit-job/<int:job_id>", methods=["PUT"])
+async def edit_joblication(job_id):
     db = await get_db()
     data = request.json
     user_id = data["user_id"]
@@ -1321,15 +1321,15 @@ async def edit_job_application(application_id):
 
     cursor = await db.cursor()
     await cursor.execute(
-        "UPDATE job_applications SET user_id = ?, job_title = ?, company_name = ?, job_description = ?, status = ?, post_url = ? WHERE id = ?",
-        (user_id, job_title, company_name, job_description, status, post_url, application_id),
+        "UPDATE saved_jobs SET user_id = ?, job_title = ?, company_name = ?, job_description = ?, status = ?, post_url = ? WHERE id = ?",
+        (user_id, job_title, company_name, job_description, status, post_url, job_id),
     )
     await db.commit()
 
-    return jsonify(success=True, application_id=application_id)
+    return jsonify(success=True, job_id=job_id)
 
-@app.route("/delete-job-application/<int:application_id>", methods=["DELETE"])
-async def delete_job_application(application_id):
+@app.route("/delete-job/<int:job_id>", methods=["DELETE"])
+async def delete_joblication(job_id):
     # Retrieve the user_id from the request body
     user_id = request.json.get('user_id')
 
@@ -1339,9 +1339,9 @@ async def delete_job_application(application_id):
     db = await get_db()
 
     cursor = await db.cursor()
-    # Update the SQL DELETE statement to delete the record that matches both user_id and application_id
+    # Update the SQL DELETE statement to delete the record that matches both user_id and job_id
     await cursor.execute(
-        "DELETE FROM job_applications WHERE id = ? AND user_id = ?", (application_id, user_id)
+        "DELETE FROM saved_jobs WHERE id = ? AND user_id = ?", (job_id, user_id)
     )
     await db.commit()
 
@@ -1358,7 +1358,7 @@ async def delete_job_application(application_id):
     chroma_collection = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
 
     chroma_collection.delete(
-        where={"job_app_id": application_id}
+        where={"job_id": job_id}
     )
 
     return jsonify(success=True)
@@ -1368,14 +1368,14 @@ async def get_resume_versions():
     db = await get_db()
     data = request.json
     user_id = data["user_id"]
-    job_app_id = data.get("job_app_id")
+    job_id = data.get("job_id")
     page = int(data.get("page", 1))
     items_per_page = int(data.get("itemsPerPage", 10))
 
     cursor = await db.cursor()
 
-    if job_app_id:
-        await cursor.execute("SELECT * FROM resume_versions WHERE user_id = ? AND job_app_id = ?", (user_id, job_app_id,))
+    if job_id:
+        await cursor.execute("SELECT * FROM resume_versions WHERE user_id = ? AND job_id = ?", (user_id, job_id,))
     else:
         await cursor.execute("SELECT * FROM resume_versions WHERE user_id = ? LIMIT ? OFFSET ?", (user_id, items_per_page, (page - 1) * items_per_page))
     
@@ -1384,16 +1384,16 @@ async def get_resume_versions():
     versions = []
 
     for version in resume_versions:
-        job_app_id = version[2]
-        await cursor.execute("SELECT * FROM job_applications WHERE id = ?", (job_app_id,))
-        job_application = await cursor.fetchone()
+        job_id = version[2]
+        await cursor.execute("SELECT * FROM saved_jobs WHERE id = ?", (job_id,))
+        job = await cursor.fetchone()
 
         versions.append({
             "id": version[0],
             "user_id": version[1],
-            "job_app_id": job_app_id,
-            "job_title": job_application[2],
-            "company_name": job_application[3],
+            "job_id": job_id,
+            "job_title": job[2],
+            "company_name": job[3],
             "version_name": version[3],
             "version_text": version[4]
         })
@@ -1406,7 +1406,7 @@ async def create_resume_version():
     db = await get_db()
     data = request.json
     user_id = data["user_id"]
-    job_app_id = data["job_app_id"]
+    job_id = data["job_id"]
     version_name = data.get("version_name")
 
     chat = ChatOpenAI(
@@ -1417,9 +1417,9 @@ async def create_resume_version():
 
     cursor = await db.cursor()
 
-    await cursor.execute(f"SELECT * FROM job_applications WHERE id = ? AND user_id = ?", (job_app_id, user_id,))
+    await cursor.execute(f"SELECT * FROM saved_jobs WHERE id = ? AND user_id = ?", (job_id, user_id,))
 
-    job_app = await cursor.fetchone()
+    job = await cursor.fetchone()
 
     await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
     
@@ -1480,8 +1480,8 @@ async def create_resume_version():
         recommendation_list = [re.sub(r'^\d+\.\s*', '', i) for i in recommendation_string.split('\n')]
 
         await cursor.execute(
-            "INSERT INTO resume_versions (user_id, job_app_id, version_name) VALUES (?, ?, ?)",
-            (user_id, job_app_id, version_name),
+            "INSERT INTO resume_versions (user_id, job_id, version_name) VALUES (?, ?, ?)",
+            (user_id, job_id, version_name),
         )
 
         version_id = cursor.lastrowid
@@ -1489,14 +1489,14 @@ async def create_resume_version():
         # Save the questions to the interview_questions table
         for recommendation in recommendation_list:
             await cursor.execute(
-                "INSERT INTO resume_recommendations (user_id, job_app_id, version_id, recommendation) VALUES (?, ?, ?, ?)",
-                (user_id, job_app_id, version_id ,recommendation),
+                "INSERT INTO resume_recommendations (user_id, job_id, version_id, recommendation) VALUES (?, ?, ?, ?)",
+                (user_id, job_id, version_id ,recommendation),
             )
 
         # Commit the changes to the database
         await db.commit()
 
-        return jsonify({"id": version_id, "user_id": user_id, "job_app_id": job_app_id, "version_name": version_name, "job_title": job_app[2], "company_name": job_app[3]})
+        return jsonify({"id": version_id, "user_id": user_id, "job_id": job_id, "version_name": version_name, "job_title": job[2], "company_name": job[3]})
     
     except Exception as e:
         print(e)
@@ -1509,13 +1509,13 @@ async def edit_resume_version(resume_version_id):
     db = await get_db()
     data = request.json
     user_id = data["user_id"]
-    job_app_id = data["job_app_id"]
+    job_id = data["job_id"]
     version_name = data["version_name"]
 
     cursor = await db.cursor()
     await cursor.execute(
-        "UPDATE resume_versions SET user_id = ?, job_app_id = ?, version_name = ? WHERE id = ?",
-        (user_id, job_app_id, version_name, resume_version_id),
+        "UPDATE resume_versions SET user_id = ?, job_id = ?, version_name = ? WHERE id = ?",
+        (user_id, job_id, version_name, resume_version_id),
     )
     await db.commit()
 

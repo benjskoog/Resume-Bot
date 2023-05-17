@@ -8,7 +8,7 @@ const ResumeOptimizer = () => {
   const [resumes, setResumes] = useState([]);
   const [selectedResume, setSelectedResume] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [jobApplications, setJobApplications] = useState([]);
+  const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(4); // Change this to your desired number of items per page
@@ -24,7 +24,7 @@ const ResumeOptimizer = () => {
         // Create a new job resume
         const response = await axios.post(`${backendUrl}/create-resume-version`, {
           user_id: user.id,
-          job_app_id: updatedResume.job_app_id,
+          job_id: updatedResume.job_id,
           version_name: updatedResume.version_name,
         });
   
@@ -33,14 +33,14 @@ const ResumeOptimizer = () => {
         // Edit an existing job resume
         const response = await axios.put(`${backendUrl}/edit-resume-version/${resumes[selectedResume].id}`, {
             user_id: user.id,
-            job_app_id: updatedResume.job_app_id,
+            job_id: updatedResume.job_id,
             version_name: updatedResume.version_name,
         });
   
         // Use the spread operator to create a new object with the updated properties
         newVersion = {
           ...resumes[selectedResume],
-          job_app_id: updatedResume.job_app_id,
+          job_id: updatedResume.job_id,
           version_name: updatedResume.version_name,
         };
       }
@@ -104,7 +104,7 @@ const ResumeOptimizer = () => {
       try {
         const response = await axios.post(`${backendUrl}/get-resume-versions`, {
           user_id: user.id,
-          job_app_id: null
+          job_id: null
         });
         const data = response.data;
         console.log(data);
@@ -120,22 +120,22 @@ const ResumeOptimizer = () => {
   }, [currentPage]);
 
   useEffect(() => {
-    async function fetchJobApplications() {
+    async function fetchJobs() {
             try {
-              const response = await axios.post(`${backendUrl}/get-job-applications`, {
+              const response = await axios.post(`${backendUrl}/get-jobs`, {
                 user_id: user.id,
                 page: currentPage,
                 itemsPerPage: itemsPerPage,
               });
               const data = response.data;
               console.log(data);
-              setJobApplications(data.applications);
-              console.log(jobApplications)
+              setJobs(data.jobs);
+              console.log(jobs)
             } catch (error) {
-              console.error('Error fetching job applications:', error);
+              console.error('Error fetching jobs:', error);
             }  
     }
-    fetchJobApplications();
+    fetchJobs();
   }, [currentPage]);
 
   useEffect(() => {
@@ -153,7 +153,7 @@ const ResumeOptimizer = () => {
     };
   }, []);
 
-  const newResume = { job_app_id: '', company_name: '', version_name: ''};
+  const newResume = { job_id: '', company_name: '', version_name: ''};
   const currentVersion = selectedResume === null ? newResume : resumes[selectedResume];
   const versionExists = selectedResume === null ? null : resumes[selectedResume];
 
@@ -162,7 +162,7 @@ const ResumeOptimizer = () => {
       {showForm ? (
         <ResumeVersionForm
           versionExists={versionExists}
-          jobApplications={jobApplications}
+          jobs={jobs}
           currentVersion={currentVersion}
           handleSave={handleSave}
           showForm={setShowForm}
@@ -172,7 +172,7 @@ const ResumeOptimizer = () => {
     <div className="container mx-auto px-4 sm:px-8">
         <div className="py-8">
             <div>
-                <h2 className="text-2xl font-semibold leading-tight">Optimize your resume for each job application!</h2>
+                <h2 className="text-2xl font-semibold leading-tight">Optimize your resume for each job!</h2>
             </div>
             <button
                 onClick={handleNewVersion}

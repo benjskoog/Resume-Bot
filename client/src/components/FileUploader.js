@@ -8,6 +8,7 @@ const FileUploader = ({ setIsModalOpen, closeModal }) => {
   const [draggedOver, setDraggedOver] = useState(false);
   const { user, setUser } = useContext(UserContext);
   const hiddenInputRef = useRef();
+  const [loading, setLoading] = useState(false); // Add loading state
   
 
   const formatSize = (size) => {
@@ -87,6 +88,8 @@ const FileUploader = ({ setIsModalOpen, closeModal }) => {
       alert("Please select a file first.");
       return;
     }
+
+    setLoading(true); // Start loading before upload
   
     const formData = new FormData();
   
@@ -112,6 +115,8 @@ const FileUploader = ({ setIsModalOpen, closeModal }) => {
     } catch (error) {
       console.error("Error uploading resume:", error);
     }
+
+    setLoading(false); // End loading after upload
   };
   
 
@@ -169,8 +174,13 @@ const FileUploader = ({ setIsModalOpen, closeModal }) => {
   
 
   return (
-    <>
-      <div className="bg-gray-100 h-full w-full">
+    <div className="relative">
+    {loading && (
+      <div className="absolute inset-0 z-10 flex justify-center items-center bg-white bg-opacity-50">
+        <div className="w-12 h-12 mt-4 mb-4 rounded-full animate-spin border-y-2 border-solid border-gray-900 border-t-transparent"></div>
+      </div>
+    )}
+    <div className="bg-gray-100 h-full w-full">
         
       <main className="container mx-auto max-w-screen-lg h-full">
 
@@ -279,8 +289,7 @@ const FileUploader = ({ setIsModalOpen, closeModal }) => {
         </article>
       </li>
     </template>
-    </>
-    
+    </div>
   );
 }
 

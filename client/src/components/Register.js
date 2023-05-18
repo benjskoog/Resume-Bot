@@ -7,12 +7,14 @@ function Register() {
   const [first_name, setFirstName] = useState('');
   const [last_name, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [job_title, setJobTitle] = useState('');
+  const [location, setLocation] = useState('');
   const [error, setError] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [loggedIn, setLoggedIn] = useState(false);
   const { setUser } = useContext(UserContext);
-  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
+  const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:3001";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,11 +25,12 @@ function Register() {
         email,
         password,
         passwordConfirmation,
+        job_title,
+        location,
       });
       console.log(response.data);
-      setUser({ id: response.data.id, email, first_name, last_name, password });
+      setUser({ id: response.data.id, email, first_name, last_name, password, job_title, location });
       setLoggedIn(true);
-      // Save the JWT token to localStorage and update the user context
     } catch (error) {
       console.error('Error registering user:', error);
       setError(error);
@@ -76,6 +79,18 @@ function Register() {
         </div>
       </div>
       <div>
+        <label for="job_title" className="block text-sm font-medium leading-6 text-gray-900">Job Title</label>
+        <div className="mt-2">
+          <input id="job_title" name="job_title" type="text" value={job_title} onChange={(e) => setJobTitle(e.target.value)} required className="block w-full rounded-md border-0 py-1.5 px-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-400 sm:text-sm sm:leading-6"></input>
+        </div>
+    </div>
+    <div>
+        <label for="location" className="block text-sm font-medium leading-6 text-gray-900">Location</label>
+        <div className="mt-2">
+          <input id="location" name="location" type="text" value={location} onChange={(e) => setLocation(e.target.value)} required className="block w-full rounded-md border-0 py-1.5 px-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-400 sm:text-sm sm:leading-6"></input>
+        </div>
+    </div>
+      <div>
         <div className="flex items-center justify-between">
           <label for="password" className="block text-sm font-medium leading-6 text-gray-900">Password</label>
         </div>
@@ -85,7 +100,7 @@ function Register() {
       </div>
       <div>
         <div className="flex items-center justify-between">
-          <label for="password" className="block text-sm font-medium leading-6 text-gray-900">Password</label>
+          <label for="password" className="block text-sm font-medium leading-6 text-gray-900">Confirm Password</label>
         </div>
         <div className="mt-2">
           <input id="confirm_password" name="password" type="password" autocomplete="current-password" value={passwordConfirmation} onChange={(e) => setPasswordConfirmation(e.target.value)} required className="block w-full rounded-md border-0 py-1.5 px-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-400 sm:text-sm sm:leading-6"></input>

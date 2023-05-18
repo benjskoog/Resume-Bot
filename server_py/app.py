@@ -44,7 +44,8 @@ from email_sending import send_email
 from typing import Optional
 import pdfplumber
 import mimetypes
-from job_search import search_jobs
+from job_search import call_serp_api
+from docx.oxml import parse_xml
 
 app = Flask(__name__)
 CORS(app)
@@ -151,7 +152,7 @@ async def register():
 
     # Create the new user
     hashed_password = generate_password_hash(data["password"], method="sha256")
-    await cursor.execute("INSERT INTO users (first_name, last_name, email, password) VALUES (?, ?, ?, ?)", (data['first_name'], data['last_name'], data['email'], hashed_password))
+    await cursor.execute("INSERT INTO users (first_name, last_name, email, job_title, location, password) VALUES (?, ?, ?, ?, ?, ?)", (data['first_name'], data['last_name'], data['email'], data['job_title'], data['location'], hashed_password))
     await db.commit()
     await cursor.execute("SELECT * FROM users WHERE email=?", (data["email"],))
     user = await cursor.fetchone()
@@ -320,12 +321,40 @@ async def upload_resume():
                     plain_text += page.extract_text() + "\n"
         elif content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             document = Document(BytesIO(resume_buffer))
+
+            # Extracting text from paragraphs
             for paragraph in document.paragraphs:
-                plain_text += paragraph.text + "\n"
+                for run in paragraph.runs:
+                    if "Hyperlink" in run.style.name:
+                        for rel in run._r.rels.values():
+                            if "mailto" in rel.reltype:
+                                plain_text += rel._target + "\n"
+                            elif "http" in rel.reltype:
+                                plain_text += rel._target + "\n"
+                    else:
+                        plain_text += run.text + "\n"
+
+            # Extracting text from tables
+            for table in document.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for paragraph in cell.paragraphs:
+                            plain_text += paragraph.text + "\n"
+            
+            # Extracting text from headers and footers
+            for section in document.sections:
+                header = section.header
+                for paragraph in header.paragraphs:
+                    plain_text += paragraph.text + "\n"
+                
+                footer = section.footer
+                for paragraph in footer.paragraphs:
+                    plain_text += paragraph.text + "\n"
+
         else:
             raise ValueError("Unsupported file type")
-        return plain_text
-    
+        return plain_text.strip()
+        
     def split_resume_into_sections(resume_text: str) -> List[Tuple[str, str]]:
         doc = nlp(resume_text)
 
@@ -378,8 +407,8 @@ async def upload_resume():
 
     try:
         plain_text = extract_raw_text(resume_buffer, content_type)
+        print(plain_text)
         resume_sections = split_resume_into_sections(plain_text)
-        await save_resume_to_database(user_id, resume_sections)
 
         embeddings = embedding_functions.OpenAIEmbeddingFunction(
                 api_key=api_key,
@@ -415,7 +444,8 @@ async def upload_resume():
             ids=doc_ids
         )
 
-        print(chroma_collection.peek())
+        await save_resume_to_database(user_id, resume_sections)
+
         return jsonify(success=True, message="Resume uploaded and parsed successfully.")
     except Exception as e:
         print("Error parsing resume:", e)
@@ -1207,6 +1237,98 @@ async def get_jobs():
 
     return jsonify(jobs=jobs, headers=["Job Title/Role", "Company Name", "Job Description", "Status"])
 
+@app.route("/search-jobs", methods=["POST"])
+async def search_jobs():
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    page = int(data.get("page", 1))
+    items_per_page = int(data.get("itemsPerPage", 10))
+    query = data.get("query")
+    location = data.get("location")
+
+    cursor = await db.cursor()
+
+    # check if there is a row that has a date_added timestamp within the last 24 hours
+    await cursor.execute("SELECT * FROM jobs WHERE date_added > datetime('now','-1 day') AND user_id = ?", (user_id,))
+    recent_jobs = await cursor.fetchall()
+    await cursor.execute("SELECT job_title FROM users WHERE id = ?", (user_id,))
+    user_job_title = await cursor.fetchone()
+
+    if not recent_jobs:
+        
+        if not user_job_title:
+            user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
+
+            embeddings = embedding_functions.OpenAIEmbeddingFunction(
+                api_key=api_key,
+                model_name="text-embedding-ada-002"
+            )
+
+            chroma_client = chromadb.Client(Settings(
+                chroma_db_impl="duckdb+parquet",
+                persist_directory=user_embeddings_directory
+            ))
+
+            chroma_collection = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
+
+            initialize_profile_docs = chroma_collection.query(
+                query_texts=["Current job title or role and current location/address"],
+                n_results=4,
+
+            )
+
+            init_docs = initialize_profile_docs["documents"]
+            init_docs_texts_flat = [doc for docs in init_docs for doc in docs]
+            init_docs_str = "\n\n".join(init_docs_texts_flat)
+
+            chat = ChatOpenAI(
+                model_name="gpt-3.5-turbo",
+                openai_api_key=api_key,
+                temperature=0,
+            )
+
+            template_final = """\nBelow is information from a person's resume. From this information, determine the user's current job title. Return only the job title and nothing else.\n  Here is the information from their resume: {context}"""
+
+            chain = LLMChain(
+                llm=chat,
+                prompt=PromptTemplate.from_template(template_final)
+            )
+
+            initialize_user = chain(init_docs_str)
+
+            user_job_title = initialize_user['text']
+    
+        # Call the SERP API job search function if no recent jobs in the database
+        job_results = call_serp_api(user_job_title, location)
+        # Delete all rows from the jobs table
+        await cursor.execute("DELETE FROM jobs WHERE user_id = ?", (user_id,))
+        # Save the job results to the database
+        print(job_results)
+        for job in job_results['jobs_results']:
+            await cursor.execute("INSERT INTO jobs (user_id, title, company_name, location, description, job_highlights, source, extensions, date_added) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))", (user_id, job["title"], job["company_name"], job["location"], job["description"], ', '.join(job["job_highlights"][0]['items']), job["via"],', '.join(job["extensions"]),))
+        await db.commit()
+
+    # Fetch jobs from the database
+    await cursor.execute("SELECT * FROM jobs WHERE user_id = ? ORDER BY date_added DESC LIMIT ? OFFSET ?", (user_id, items_per_page, (page - 1) * items_per_page))
+    jobs = await cursor.fetchall()
+
+    jobs = [
+        {
+            "id": job[0],
+            "title": job[2],
+            "company_name": job[3],
+            "location": job[4],
+            "description": job[5],
+            "job_highlights": job[6],
+            "date_added": job[7],
+            "saved": job[10],
+        }
+        for job in jobs
+    ]
+
+    return jsonify(jobs=jobs, headers=["Job Title", "Company Name", "Location", "Job Description", "Job Highlights"])
+
 @app.route("/create-job", methods=["POST"])
 async def create_job():
     db = await get_db()
@@ -1216,17 +1338,24 @@ async def create_job():
     company_name = data["company_name"]
     job_description = data["job_description"]
     status = data["status"]
-    post_url = data["post_url"]
+    post_url = data.get("post_url")
+    saved = data.get("saved")
+    job_id = data.get("id")
     date_created = datetime.utcnow()
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
     os.makedirs(user_embeddings_directory, exist_ok=True)
+
+    print(user_id, job_id, saved)
 
     cursor = await db.cursor()
     await cursor.execute(
         "INSERT INTO saved_jobs (user_id, job_title, company_name, job_description, status, post_url, date_created) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (user_id, job_title, company_name, job_description, status, post_url, date_created),
     )
+
+    if saved:
+        await cursor.execute("UPDATE jobs SET saved = True WHERE user_id = ? AND id = ?", (user_id, job_id),)
 
     await db.commit()
 

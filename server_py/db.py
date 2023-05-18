@@ -48,6 +48,21 @@ async def setup_db():
                 FOREIGN KEY (user_id) REFERENCES users (id)
             );
 
+            CREATE TABLE IF NOT EXISTS jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                title TEXT,
+                company_name TEXT,
+                location TEXT,
+                description TEXT,
+                job_highlights TEXT,
+                source TEXT,
+                extensions TEXT,
+                saved BOOLEAN,
+                date_added TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            );
+
             CREATE TABLE IF NOT EXISTS saved_jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
@@ -93,6 +108,8 @@ async def setup_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 first_name TEXT NOT NULL,
                 last_name TEXT,
+                job_title TEXT,
+                location TEXT,
                 email TEXT UNIQUE NOT NULL, 
                 password TEXT NOT NULL
             );
@@ -191,4 +208,3 @@ async def drop_all_tables():
 
 # Initialize the database when the module is loaded
 asyncio.run(setup_db())
-asyncio.run(drop_all_tables())

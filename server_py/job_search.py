@@ -1,9 +1,14 @@
 from serpapi import GoogleSearch
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 api_key = os.environ.get("SERP_API")
 
-def search_jobs(query, location, num_results=10):
+print(api_key)
+
+def call_serp_api(query, location, num_results=50):
     params = {
         "engine": "google_jobs",
         "q": query,

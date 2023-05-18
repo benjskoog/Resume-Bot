@@ -17,6 +17,7 @@ import SavedJobs from "./SavedJobs";
 import axios from "axios";
 import NewJobForm from "./NewJobForm";
 import ResumeOptimizer from "./ResumeOptimizer";
+import Jobs from "./Jobs";
 
 const Main = React.forwardRef((props, ref) => {
   const location = useLocation();
@@ -78,6 +79,7 @@ const Main = React.forwardRef((props, ref) => {
               <Route path="/chat" element={<Chat ref={chatRef} />} />
               <Route path="/chat/:chatId" element={<Chat ref={chatRef} />} />
               <Route path="/datasources" element={<DataSources />} />
+              <Route path="/jobs" element={<Jobs />} />
               <Route path="/saved-jobs" element={<SavedJobs />} />
               <Route path="/new-job-form" element={<NewJobForm />} />
               <Route path="/resume-optimizer" element={<ResumeOptimizer />} />

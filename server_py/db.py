@@ -196,6 +196,7 @@ async def drop_all_tables():
             DROP TABLE IF EXISTS resume;
             DROP TABLE IF EXISTS messages;
             DROP TABLE IF EXISTS chat;
+            DROP TABLE IF EXISTS jobs;
             DROP TABLE IF EXISTS users;
             """
         )

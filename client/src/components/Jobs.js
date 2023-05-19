@@ -78,11 +78,6 @@ useEffect(() => {
       setIsModalOpen(false);
     }
   };
-
-  {jobs.map((job, index) => {
-    console.log(`Job ${index}: saved=${job.saved}, type=${typeof job.saved}`);
-    // Rest of your code...
-  })}
   
   return (
     <div className="relative">

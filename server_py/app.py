@@ -1322,7 +1322,7 @@ async def search_jobs():
             "description": job[5],
             "job_highlights": job[6],
             "date_added": job[7],
-            "saved": job[10],
+            "saved": job[9],
         }
         for job in jobs
     ]

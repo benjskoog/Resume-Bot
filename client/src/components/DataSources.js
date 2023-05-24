@@ -33,7 +33,7 @@ function DataSources({ onBack }) {
   let allowedTableNames = [];
 
   if (user.email === "benjskoog@gmail.com") {
-    allowedTableNames = ["chat", "messages", "resume", "users", "interview_questions", "jobs"];
+    allowedTableNames = ["chat", "messages", "resume", "users", "interview_questions", "jobs", "cover_letter"];
   } else {
     allowedTableNames = ["chat", "messages", "resume"];
   }

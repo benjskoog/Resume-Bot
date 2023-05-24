@@ -181,6 +181,7 @@ async def register():
 @app.route("/login", methods=["POST"])
 async def login():
     data = request.get_json()
+    print(data)
 
     # Check if the user exists
     db = await get_db()
@@ -188,13 +189,13 @@ async def login():
     await cursor.execute("SELECT * FROM users WHERE email=?", (data["email"],))
     user = await cursor.fetchone()
 
-    if not user or not check_password_hash(user[4], data["password"]):
+    if not user or not check_password_hash(user[6], data["password"]):
         return jsonify({"error": "Invalid username or password"}), 401
 
     # Create the access token
     access_token = create_access_token(identity=user[3])
 
-    return jsonify({"access_token": access_token, "id": user[0], "email": user[3], "first_name": user[1], "last_name": user[2]}), 200
+    return jsonify({"access_token": access_token, "id": user[0], "email": user[5], "first_name": user[1], "last_name": user[2]}), 200
 
 @app.route("/forgot-password", methods=["POST"])
 async def forgot_password():
@@ -318,7 +319,7 @@ async def upload_resume():
         if content_type == "application/pdf":
             with pdfplumber.open(BytesIO(resume_buffer)) as pdf:
                 for page in pdf.pages:
-                    plain_text += page.extract_text() + "\n"
+                    plain_text += page.extract_text(x_tolerance=1, y_tolerance=1) + "\n"
         elif content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             document = Document(BytesIO(resume_buffer))
 
@@ -1662,6 +1663,144 @@ async def delete_resume_version(resume_version_id):
     await db.commit()
 
     return jsonify(success=True)
+
+@app.route("/generate-cover-letter", methods=["POST"])
+async def generate_cover_letter():
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    job_id = data.get("job_id")
+    version_id = data.get("version_id")
+
+    chat = ChatOpenAI(
+        model_name="gpt-3.5-turbo",
+        openai_api_key=api_key,
+        temperature=0,
+    )
+
+    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
+
+    cursor = await db.cursor()
+
+    await cursor.execute(f"SELECT * FROM saved_jobs WHERE id = ? AND user_id = ?", (job_id, user_id,))
+
+    job = await cursor.fetchone()
+
+    await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
+    
+    resume = await cursor.fetchone()
+
+    print(job[4])
+    print(resume[3])
+
+    embeddings = embedding_functions.OpenAIEmbeddingFunction(
+        api_key=api_key,
+        model_name="text-embedding-ada-002"
+    )
+
+    chroma_client = chromadb.Client(Settings(
+        chroma_db_impl="duckdb+parquet",
+        persist_directory=user_embeddings_directory
+    ))
+
+    chroma_collection_jobs = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
+
+    chroma_collection_resume = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
+
+    jobs_docs = chroma_collection_jobs.query(
+        query_texts=["What are the important responsibilities, qualifications, skills, and requirements for this job?"],
+        n_results=4
+    )
+
+    resume_docs = chroma_collection_resume.query(
+        query_texts=["What are the important responsibilities, qualifications, skills, and requirements outlined in this resume?"],
+        n_results=4
+    )
+
+    jobs_docs_texts = jobs_docs["documents"]
+    jobs_docs_texts_flat = [doc for docs in jobs_docs_texts for doc in docs]
+    jobs_docs_str = "\n\n".join(jobs_docs_texts_flat)
+
+    resume_docs_texts = resume_docs["documents"]
+    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
+    resume_docs_str = "\n\n".join(resume_docs_texts_flat)
+
+    template_questions_base = f"""Below is a user's resume and the description of a job they are applying to. Please write a cover letter for their job application.
+        
+    Job Description Information: {job[4]}"""
+
+    template_final = template_questions_base + """\nResume: {context}\n """
+
+    chain = LLMChain(
+        llm=chat,
+        verbose=True,
+        prompt=PromptTemplate.from_template(template_final)
+    )
+
+    try:
+        response = chain(resume[3])
+        print(response)
+        # Convert the questions string into a Python list
+        string = response['text']
+
+        await cursor.execute("INSERT INTO cover_letter (user_id, job_id, cover_letter) VALUES (?, ?, ?)", (user_id, job_id , string),)
+
+        # Commit the changes to the database
+        await db.commit()
+
+        return jsonify(cover_letter=string)
+    except Exception as e:
+        print(e)
+        return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
+    
+@app.route("/get-cover-letter", methods=["POST"])
+async def get_cover_letter():
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    version_id = data.get("version_id")
+    job_id = data.get("job_id")
+
+    print(data)
+
+    cursor = await db.cursor()
+
+    # Fetch recommendations based on user_id and version_id
+    # Replace 'recommendations' with the appropriate table name and columns
+
+    await cursor.execute("SELECT * FROM cover_letter WHERE user_id = ? AND job_id = ?", (user_id, job_id))
+        
+    cover_letter = await cursor.fetchone()
+
+    cover_letter_data = [
+        {
+            "id": cover_letter[0],
+            "user_id": cover_letter[1],
+            "job_id": cover_letter[2],
+            "cover_letter" : cover_letter[3]
+
+        }
+    ]
+
+    return jsonify(cover_letter=cover_letter[3])
+
+@app.route("/delete-cover-letter", methods=["POST"])
+async def delete_cover_letter():
+    db = await get_db()
+    data = request.json
+    user_id = data["user_id"]
+    cover_letter_id = data["cover_letter_id"]
+
+    cursor = await db.cursor()
+    try:
+        # Delete the recommendation based on recommendation_id and user_id
+        # Replace 'recommendations' with the appropriate table name
+        await cursor.execute("DELETE FROM cover_letter WHERE id = ? AND user_id = ?", (cover_letter_id, user_id))
+        await db.commit()
+        return jsonify(success=True, message="Cover letter deleted successfully")
+    except Exception as e:
+        print(e)
+        return jsonify(success=False, message="Error deleting the cover letter")
 
 @app.route("/get-database-tables", methods=["GET"])
 async def get_database_tables():

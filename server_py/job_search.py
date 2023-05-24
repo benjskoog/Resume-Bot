@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+print(os.environ)
 
 api_key = os.environ.get("SERP_API")
 

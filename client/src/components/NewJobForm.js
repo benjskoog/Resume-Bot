@@ -3,7 +3,7 @@ import UserContext from './UserContext';
 import Select from 'react-select';
 import InterviewQuestionsForm from './InterviewQuestionsForm';
 import RecommendationsForm from './RecommendationsForm';
-import ResumeVersionCard from './ResumeVersionCard';
+import CoverLetter from './CoverLetter';
 
 const NewJobForm = ({ jobExists, currentJob, handleSave, showForm }) => {
   const [form, setForm] = useState(currentJob);
@@ -154,11 +154,10 @@ const NewJobForm = ({ jobExists, currentJob, handleSave, showForm }) => {
         {showInterviewQuestions && <InterviewQuestionsForm job={true} jobId={currentJob.id} />}
         </div>
     }
-    {/*
     {jobExists &&
     <div className="w-full max-w-6xl border border-gray-300 bg-gray-100">
         <div onClick={() => setShowRecommendations(!showRecommendations)} className="px-4 py-4 cursor-pointer flex flex-row justify-between items-center border-b border-gray-300">
-                <p className="text-2xl font-semibold text-gray-600">Resume Version</p>
+                <p className="text-2xl font-semibold text-gray-600">Cover Letter</p>
                 <button>
                             {showRecommendations ? (
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
@@ -171,10 +170,9 @@ const NewJobForm = ({ jobExists, currentJob, handleSave, showForm }) => {
                         )}
                 </button>
             </div>
-        {showRecommendations && <ResumeVersionCard jobId={currentJob.id} />}
+        {showRecommendations && <CoverLetter jobId={currentJob.id} />}
         </div>
     }
-    */}
   </div>
   </div>
   );

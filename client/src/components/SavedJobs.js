@@ -235,7 +235,7 @@ const SavedJobs = () => {
                             className="text-left text-blue-600 hover:text-blue-800 focus:outline-none"
                             onClick={() => handleEdit(index)}
                         >
-                            <p className="text-gray-900 text-blue-900 whitespace-no-wrap">
+                            <p className="text-gray-900 text-blue-600 whitespace-no-wrap">
                             {job.job_title}
                             </p>
                         </button>

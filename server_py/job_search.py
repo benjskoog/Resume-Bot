@@ -12,8 +12,7 @@ print(api_key)
 def call_serp_api(query, location, num_results=50):
     params = {
         "engine": "google_jobs",
-        "q": query,
-        "location": location,
+        "q": f"""{query} {location}""",
         "num": num_results,
         "api_key": api_key
     }

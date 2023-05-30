@@ -24,7 +24,7 @@ function Login() {
 
       localStorage.setItem('access_token', response.data.access_token);
 
-      setUser({ id: response.data.id, email, first_name: response.data.first_name, last_name: response.data.last_name, password });
+      setUser({ id: response.data.id, email, first_name: response.data.first_name, last_name: response.data.last_name, password, job_title: response.data.job_title, location: response.data.location});
 
       setLoggedIn(true);
 

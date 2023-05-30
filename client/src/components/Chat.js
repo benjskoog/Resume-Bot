@@ -6,11 +6,13 @@ import BottomInput from './BottomInput';
 import ChatHistory from './ChatHistory';
 import UserContext from './UserContext';
 import axios from "axios";
+import NewUserWalkthrough from './NewUserWalkthrough';
 
 const Chat = React.forwardRef((props, ref) => {
-
   const [messages, setMessages] = useState([]);
   const [fetchingResponse, setFetchingResponse] = useState(false);
+  const [isNewUser, setIsNewUser] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [chat, setChat] = useState(false);
   const { chatId } = useParams();
   const { user, loading } = useContext(UserContext);
@@ -85,18 +87,50 @@ const Chat = React.forwardRef((props, ref) => {
     }
   }, [chatId]);
 
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const response = await axios.get(`${backendUrl}/get-table-data/resume`, {
+          params: { user_id: user.id },
+        });
+
+        setIsLoading(false); // Set loading to false here after data fetch
+
+        if (response.data.length > 0) {
+          setIsNewUser(false);
+        }
+        console.log(response.data);
+      } catch (error) {
+        console.error(`Error fetching data for table resume:`, error);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+
   return (
     <>
-    <div className="flex">
-    <div className="overflow-y-auto h-[calc(100vh-190px)] max-w-full flex-1 flex-col">
-      <Messages
-        messages={messages}
-        fetchingResponse={fetchingResponse}
-      />
-      <BottomInput onSubmit={handleFormSubmit}/>
-    </div>
-    {user && <ChatHistory userId={user.id} onSubmit={handleFormSubmit} clearChatState={clearChatState} />}
-    </div>
+      {!isLoading && isNewUser && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50"
+          onClick={() => setIsNewUser(false)}
+        >
+          <div className="bg-white rounded shadow-lg relative w-1/2">
+            <NewUserWalkthrough />
+          </div>
+        </div>
+      )}
+      <div className="flex">
+        <div className="overflow-y-auto h-[calc(100vh-190px)] max-w-full flex-1 flex-col">
+          <Messages
+            messages={messages}
+            fetchingResponse={fetchingResponse}
+          />
+          <BottomInput onSubmit={handleFormSubmit}/>
+        </div>
+        {user && <ChatHistory userId={user.id} onSubmit={handleFormSubmit} clearChatState={clearChatState} />}
+      </div>
     </>
   );
 });

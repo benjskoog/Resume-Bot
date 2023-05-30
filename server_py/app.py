@@ -176,7 +176,7 @@ async def register():
 
     chroma_client.create_collection(name="questions", embedding_function=embeddings)
 
-    return jsonify({"id": user[0], "email": user[3], "first_name": user[1], "last_name": user[2]}), 201
+    return jsonify({"id": user[0], "email": user[5], "first_name": user[1], "last_name": user[2], "job_title": user[3], "location": user[4]}), 201
 
 @app.route("/login", methods=["POST"])
 async def login():
@@ -195,7 +195,7 @@ async def login():
     # Create the access token
     access_token = create_access_token(identity=user[3])
 
-    return jsonify({"access_token": access_token, "id": user[0], "email": user[5], "first_name": user[1], "last_name": user[2]}), 200
+    return jsonify({"access_token": access_token, "id": user[0], "email": user[5], "first_name": user[1], "last_name": user[2], "job_title": user[3], "location": user[4]}), 200
 
 @app.route("/forgot-password", methods=["POST"])
 async def forgot_password():
@@ -478,6 +478,7 @@ async def gpt_api_call():
     user_id = form_values["id"]
     first_name = form_values["first_name"]
     print(user_id)
+    print(api_key)
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
 

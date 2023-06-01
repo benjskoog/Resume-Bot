@@ -11,7 +11,7 @@ const ResumeOptimizer = () => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(4); // Change this to your desired number of items per page
+  const [itemsPerPage, setItemsPerPage] = useState(100); // Change this to your desired number of items per page
   const { user, setUser, logout } = useContext(UserContext);
   const navigate = useNavigate();
   const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
@@ -35,6 +35,7 @@ const ResumeOptimizer = () => {
             user_id: user.id,
             job_id: updatedResume.job_id,
             version_name: updatedResume.version_name,
+            version_text: updatedResume.version_text
         });
   
         // Use the spread operator to create a new object with the updated properties

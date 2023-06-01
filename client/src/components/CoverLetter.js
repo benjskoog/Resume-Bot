@@ -4,7 +4,7 @@ import UserContext from './UserContext';
 import Select from 'react-select';
 
 function CoverLetter({ jobId, resumeVersionId }) {
-    const [coverLetter, setCoverLetter] = useState([]);
+    const [coverLetter, setCoverLetter] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [triggerUpdate, setTriggerUpdate] = useState(false);
@@ -86,6 +86,7 @@ function CoverLetter({ jobId, resumeVersionId }) {
         Generate Cover Letter
       </button>
       </div>
+      {coverLetter &&
       <div className="max-w-7xl flex flex-col max-w-6xl mt-2 w-full">
             <div className="block rounded-lg bg-white p-6 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] dark:bg-neutral-700">
                 <p className="mb-2 text-base text-neutral-600 dark:text-neutral-200 whitespace-pre-wrap">
@@ -101,6 +102,7 @@ function CoverLetter({ jobId, resumeVersionId }) {
                 </button>
             </div>
       </div>
+    }
     </div>
     </div>
   );

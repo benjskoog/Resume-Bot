@@ -1,7 +1,10 @@
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 import os
-import aiosqlite
+import asyncpg
+from asyncpg.exceptions import UniqueViolationError
+import psycopg2
+import asyncio
 import json
 import secrets
 from dotenv import load_dotenv
@@ -29,7 +32,7 @@ from docx import Document
 from io import BytesIO
 from flask_uploads import UploadSet, configure_uploads, IMAGES
 from db import get_table_data, delete_row, setup_db
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import re
 from typing import List, Tuple
@@ -51,6 +54,7 @@ app = Flask(__name__)
 CORS(app)
 
 DATABASE = "data.db"
+DB_URL = os.environ.get("DB_URL")
 
 chains = {}
 
@@ -118,44 +122,43 @@ SECTION_KEYWORDS = [
     "personal interests",
 ]
 
-
 @app.before_first_request
-async def create_tables():
-    await setup_db()
+def create_tables():
+    setup_db()
 
 
-async def get_db():
+def get_db():
     if "db" not in g:
-        g.db = await aiosqlite.connect(DATABASE)
+        g.db = psycopg2.connect(DB_URL)
     return g.db
 
-async def close_db(e=None):
+def close_db(e=None):
     db = g.pop("db", None)
     if db is not None:
-        await db.close()
+        db.close()
 
 app.teardown_appcontext(close_db)
 
 @app.route("/register", methods=["POST"])
-async def register():
+def register():
     data = request.get_json()
     print(data)
 
     # Check if the user already exists
-    db = await get_db()
-    cursor = await db.cursor()
-    await cursor.execute("SELECT * FROM users WHERE email=?", (data["email"],))
-    existing_user = await cursor.fetchone()
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM users WHERE email=%s", (data["email"],))
+    existing_user = cursor.fetchone()
 
     if existing_user:
         return jsonify({"error": "User already exists"}), 400
 
     # Create the new user
     hashed_password = generate_password_hash(data["password"], method="sha256")
-    await cursor.execute("INSERT INTO users (first_name, last_name, email, job_title, location, password) VALUES (?, ?, ?, ?, ?, ?)", (data['first_name'], data['last_name'], data['email'], data['job_title'], data['location'], hashed_password))
-    await db.commit()
-    await cursor.execute("SELECT * FROM users WHERE email=?", (data["email"],))
-    user = await cursor.fetchone()
+    cursor.execute("INSERT INTO users (first_name, last_name, email, job_title, location, password) VALUES (%s, %s, %s, %s, %s, %s)", (data['first_name'], data['last_name'], data['email'], data['job_title'], data['location'], hashed_password))
+    db.commit()
+    cursor.execute("SELECT * FROM users WHERE email=%s", (data["email"],))
+    user = cursor.fetchone()
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user[0]}_embeddings")
     os.makedirs(user_embeddings_directory, exist_ok=True)
@@ -170,24 +173,26 @@ async def register():
         model_name="text-embedding-ada-002"
     )
 
-    chroma_client.create_collection(name="resume", embedding_function=embeddings)
+    chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
 
-    chroma_client.create_collection(name="jobs", embedding_function=embeddings)
+    chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
 
-    chroma_client.create_collection(name="questions", embedding_function=embeddings)
+    chroma_client.get_or_create_collection(name="questions", embedding_function=embeddings)
 
     return jsonify({"id": user[0], "email": user[5], "first_name": user[1], "last_name": user[2], "job_title": user[3], "location": user[4]}), 201
 
 @app.route("/login", methods=["POST"])
-async def login():
+def login():
     data = request.get_json()
     print(data)
 
     # Check if the user exists
-    db = await get_db()
-    cursor = await db.cursor()
-    await cursor.execute("SELECT * FROM users WHERE email=?", (data["email"],))
-    user = await cursor.fetchone()
+    db = get_db()
+    cur = db.cursor()
+
+    cur.execute("SELECT * FROM users WHERE email=%s", (data["email"],))
+    user = cur.fetchone()
+    cur.close()
 
     if not user or not check_password_hash(user[6], data["password"]):
         return jsonify({"error": "Invalid username or password"}), 401
@@ -198,17 +203,19 @@ async def login():
     return jsonify({"access_token": access_token, "id": user[0], "email": user[5], "first_name": user[1], "last_name": user[2], "job_title": user[3], "location": user[4]}), 200
 
 @app.route("/forgot-password", methods=["POST"])
-async def forgot_password():
+def forgot_password():
     data = request.get_json()
     email = data.get("email")
+    url = data.get("frontendUrl")
 
     if not email:
         return jsonify({"error": "Email is required"}), 400
 
-    db = await get_db()
-    cursor = await db.cursor()
-    await cursor.execute("SELECT * FROM users WHERE email=?", (email,))
-    user = await cursor.fetchone()
+    db = get_db()
+    cur = db.cursor()
+
+    cur.execute("SELECT * FROM users WHERE email=%s", (email, ))
+    user = cur.fetchone()
 
     if not user:
         return jsonify({"error": "No user found with the provided email"}), 404
@@ -217,11 +224,13 @@ async def forgot_password():
     reset_token = secrets.token_hex(16)
 
     # Save the token in the database with an expiration time
-    await cursor.execute("INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+1 hour'))", (user[0], reset_token))
-    await db.commit()
+    cur.execute("INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (%s, %s, NOW() + INTERVAL '1 hour')",
+                     user[0], reset_token)
+    db.commit()
+    cur.close()
 
     # Send the password reset email
-    reset_link = f"http://localhost:3000/reset-password?token={reset_token}"
+    reset_link = f"{url}/reset-password?token={reset_token}"
     email_subject = "Password Reset Request"
     email_body = f"Please click the following link to reset your password: {reset_link}"
     
@@ -230,7 +239,7 @@ async def forgot_password():
     return jsonify({"message": "A password reset link has been sent to your email address"}), 200
 
 @app.route("/reset-password", methods=["POST"])
-async def reset_password():
+def reset_password():
     data = request.get_json()
     token = data.get("token")
     new_password = data.get("password")
@@ -240,30 +249,30 @@ async def reset_password():
     if not token or not new_password:
         return jsonify({"error": "Token and new password are required"}), 400
 
-    db = await get_db()
-    cursor = await db.cursor()
+    db = get_db()
+    cur = db.cursor() 
 
-    # Find the password reset token in the database
-    await cursor.execute("SELECT * FROM password_reset_tokens WHERE token=? AND expires_at > datetime('now')", (token,))
-    token_entry = await cursor.fetchone()
+    token_entry = cur.execute("SELECT * FROM password_reset_tokens WHERE token=%s AND expires_at > NOW()", (token, ))
+    token_entry = cur.fetchone()
 
     if not token_entry:
         return jsonify({"error": "Invalid or expired token"}), 400
 
     # Update the user's password
     hashed_password = generate_password_hash(new_password, method="sha256")
-    await cursor.execute("UPDATE users SET password=? WHERE id=?", (hashed_password, token_entry[1]))
-    await db.commit()
+    cur.execute("UPDATE users SET password=%s WHERE id=%s", (hashed_password, token_entry[1]))
+    db.commit()
 
     # Delete the used password reset token
-    await cursor.execute("DELETE FROM password_reset_tokens WHERE token=?", (token,))
-    await db.commit()
+    cur.execute("DELETE FROM password_reset_tokens WHERE token=%s", (token, ))
+    db.commit()
+    cur.close()
 
     return jsonify({"message": "Password has been successfully reset"}), 200
 
 
 @app.route("/update-password", methods=["PUT"])
-async def update_password():
+def update_password():
     data = request.get_json()
     email = data.get("email")
     new_password = data.get("newPassword")
@@ -271,20 +280,21 @@ async def update_password():
     if not email or not new_password:
         return jsonify({"type" : "error", "message": "Email and new password are required"}), 400
 
-    db = await get_db()
-    cursor = await db.cursor()
+    db = get_db()
+    cur = db.cursor()
 
     # Find the user by email
-    await cursor.execute("SELECT * FROM users WHERE email=?", (email,))
-    user = await cursor.fetchone()
+    cur.execute("SELECT * FROM users WHERE email=%s", (email, ))
+    user = cur.fetchone()
 
     if not user:
         return jsonify({"type" : "error", "message": "User not found"}), 404
 
     # Update the user's password
     hashed_password = generate_password_hash(new_password, method="sha256")
-    await cursor.execute("UPDATE users SET password=? WHERE id=?", (hashed_password, user[0]))
-    await db.commit()
+    cur.execute("UPDATE users SET password=%s WHERE id=%s", (hashed_password, user[0]))
+    db.commit()
+    cur.close()
 
     return jsonify({"type": "success", "message": "Password has been successfully updated"}), 200
 
@@ -292,14 +302,16 @@ async def update_password():
 
 @app.route("/profile", methods=["GET"])
 @jwt_required()
-async def profile():
+def profile():
     current_user = get_jwt_identity()
     
     # Fetch user data from the database
-    db = await get_db()
-    cursor = await db.cursor()
-    await cursor.execute("SELECT * FROM users WHERE username=?", (current_user,))
-    user_data = await cursor.fetchone()
+    db = get_db()
+    cur = db.cursor()
+
+    cur.execute("SELECT * FROM users WHERE username=%s", (current_user, ))
+
+    user_data = cur.fetchone()
 
     if not user_data:
         return jsonify({"error": "User not found"}), 404
@@ -308,7 +320,7 @@ async def profile():
 
 
 @app.route("/upload-resume", methods=["POST"])
-async def upload_resume():
+def upload_resume():
     user_id = request.form.get("id")
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
     os.makedirs(user_embeddings_directory, exist_ok=True)
@@ -380,22 +392,26 @@ async def upload_resume():
 
         return sections
 
-    async def save_resume_to_database(user_id: int, resume_sections: List[Tuple[str, str]]):
-        db = await get_db()
-        cursor = await db.cursor()
-
+    def save_resume_to_database(user_id: int, resume_sections: List[Tuple[str, str]]):
+        db = get_db()
+        cur = db.cursor()
+        
         # Delete existing resume data
-        await cursor.execute("DELETE FROM resume WHERE user_id=?", (user_id,))
-
+        cur.execute("DELETE FROM resume WHERE user_id=%s", (user_id, ))
+        
         # Insert full resume
-        await cursor.execute("INSERT INTO resume (user_id, section, content) VALUES (?, ?, ?)", (user_id, "FULL RESUME", plain_text))
+        cur.execute("INSERT INTO resume (user_id, section, content) VALUES (%s, %s, %s)",
+                         (user_id, "FULL RESUME", plain_text))
         
         # Insert each section as a new row in the "resume" table
         for section, content in resume_sections:
-            await cursor.execute("INSERT INTO resume (user_id, section, content) VALUES (?, ?, ?)", (user_id, section, content))
+            cur.execute("INSERT INTO resume (user_id, section, content) VALUES (%s, %s, %s)",
+                             (user_id, section, content))
             docs.append(section + " " + content)
 
-        await db.commit()
+        db.commit()
+
+        cur.close()
 
 
     try:
@@ -445,7 +461,7 @@ async def upload_resume():
             ids=doc_ids
         )
 
-        await save_resume_to_database(user_id, resume_sections)
+        save_resume_to_database(user_id, resume_sections)
 
         return jsonify(success=True, message="Resume uploaded and parsed successfully.")
     except Exception as e:
@@ -458,12 +474,15 @@ def get_linkedIn():
 
 
 @app.route("/fetch-experience-data", methods=["GET"])
-async def fetch_experience_data():
+def fetch_experience_data():
     try:
-        db = await get_db()
-        cursor = await db.cursor()
-        await cursor.execute("SELECT content FROM resume")
-        rows = await cursor.fetchall()
+        db = get_db()
+        cur = db.cursor()
+
+        cur.execute("SELECT content FROM resume")
+
+        rows = cur.fetchall()
+
         return jsonify(resume=rows)
     except Exception as e:
         print("Error fetching resume data:", e)
@@ -471,8 +490,10 @@ async def fetch_experience_data():
 
 
 @app.route("/gpt-api-call", methods=["POST"])
-async def gpt_api_call():
-    db = await get_db()
+def gpt_api_call():
+    db = get_db()
+    cur = db.cursor()
+
     form_values = request.json
     query = form_values["query"]
     user_id = form_values["id"]
@@ -595,8 +616,8 @@ async def gpt_api_call():
 
         chains[chain_id] = chain
 
-        await db.execute("INSERT INTO chat (user_id, chat_id, chat_name) VALUES (?, ?, ?)", [user_id, chain_id, query])
-        await db.commit()
+        cur.execute("INSERT INTO chat (user_id, chat_id, chat_name) VALUES (%s, %s, %s)", (user_id, chain_id, query))
+        db.commit()
     
     try:
         print(chain)
@@ -605,15 +626,16 @@ async def gpt_api_call():
         print(answer)
 
         timestamp = datetime.now().isoformat()
-        await db.execute(
-        "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (?, ?, ?, ?, ?)",
-        ["user", user_id, chain_id, query, timestamp]
+        cur.execute(
+        "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (%s, %s, %s, %s, %s)",
+        ("user", user_id, chain_id, query, timestamp)
         )
-        await db.execute(
-            "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (?, ?, ?, ?, ?)",
-            ["bot", user_id, chain_id, answer, timestamp]
+        cur.execute(
+            "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (%s, %s, %s, %s, %s)",
+            ("bot", user_id, chain_id, answer, timestamp)
         )
-        await db.commit()
+        db.commit()
+        cur.close()
 
         return jsonify(answer=answer, chainId=chain_id)
     except Exception as e:
@@ -621,8 +643,10 @@ async def gpt_api_call():
         return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
 
 @app.route("/get-answer-help", methods=["POST"])
-async def get_answer_help():
-    db = await get_db()
+def get_answer_help():
+    db = get_db()
+    cur = db.cursor()
+
     form_values = request.json
     query = form_values["query"]
     user_id = form_values["id"]
@@ -724,15 +748,13 @@ async def get_answer_help():
         answer = json.loads(result_endpoint)
         print(answer)
 
-        db = await get_db()
-        cursor = await db.cursor()
-
-        await cursor.execute(
-            "UPDATE interview_questions SET recommendation = ? WHERE id = ?",
+        cur.execute(
+            "UPDATE interview_questions SET recommendation = %s WHERE id = %s",
             (answer["recommendation"], question_id),
         )
 
-        await db.commit()  # Commit the changes to the database
+        db.commit()  # Commit the changes to the database
+        cur.close()
 
         return jsonify(answer)
     except Exception as e:
@@ -740,7 +762,7 @@ async def get_answer_help():
         return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
 
 @app.route("/generate-interview-questions", methods=["POST"])
-async def generate_interview_questions():
+def generate_interview_questions():
     form_values = request.json
     print(form_values)
     user_id = form_values["user_id"]
@@ -753,12 +775,12 @@ async def generate_interview_questions():
         temperature=0,
     )
 
-    db = await get_db()
-    cursor = await db.cursor()
+    db = get_db()
+    cur = db.cursor()
 
-    await cursor.execute(f"SELECT * FROM interview_questions WHERE user_id = ?", (user_id,))
+    cur.execute(f"SELECT * FROM interview_questions WHERE user_id = %s", (user_id,))
 
-    existing_questions = await cursor.fetchall()
+    existing_questions = cur.fetchall()
     questions_list = [row[2] for row in existing_questions]
     questions_str = ', '.join(f'"{question}"' for question in questions_list)
 
@@ -798,33 +820,34 @@ async def generate_interview_questions():
 
         resume = resume_docs_str
 
-        await cursor.execute(f"SELECT * FROM saved_jobs WHERE id = ? AND user_id = ?", (job_id, user_id,))
+        cur.execute(f"SELECT * FROM saved_jobs WHERE id = %s AND user_id = %s", (job_id, user_id,))
 
-        job = await cursor.fetchall()
+        job = cur.fetchall()
 
-        print(job)
+        print(job[0][4])
 
         template_questions_base = f"""Below is a user's resume and the description for a job they are applying to. Please return 3 interview questions {type_string} that they might be asked during an interview for this job. Please return the questions separated by newlines.
         
-        Job Description: {job[0][4]}
+        Job Description user is applying to:\n {job[0][4]}\n
         """
 
     else:
         template_questions_base = f"""Below is a user's resume. Please return 3 interview questions {type_string} that they might be asked during an interview. Please return the questions separated by newlines."""
 
-        await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
-        resume = await cursor.fetchall()
+        cur.execute(f"SELECT * FROM resume WHERE section = %s AND user_id = %s", ("FULL RESUME",user_id,))
+        resume = cur.fetchall()
 
     if existing_questions:
         exclude_similar = f"""These questions have already been asked: [{questions_str}]"""
     else:
         exclude_similar = ""
 
-    template_final = template_questions_base + """Resume: {context} """ + exclude_similar
+    template_final = template_questions_base + """Information from the user's Resume:\n {context} """ + exclude_similar
 
 
     chain = LLMChain(
         llm=chat,
+        verbose=True,
         prompt=PromptTemplate.from_template(template_final)
     )
 
@@ -838,13 +861,14 @@ async def generate_interview_questions():
         questions_list = [re.sub(r'^\d+\.\s*', '', i) for i in questions_string.split('\n')]
         # Save the questions to the interview_questions table
         for question in questions_list:
-            await cursor.execute(
-                "INSERT INTO interview_questions (user_id, job_id, question) VALUES (?, ?, ?)",
+            cur.execute(
+                "INSERT INTO interview_questions (user_id, job_id, question) VALUES (%s, %s, %s)",
                 (user_id, job_id, question),
             )
 
         # Commit the changes to the database
-        await db.commit()
+        db.commit()
+        cur.close()
 
         return jsonify(questions=questions_list, chainId=chain_id)
     except Exception as e:
@@ -853,22 +877,22 @@ async def generate_interview_questions():
 
 
 @app.route("/get-interview-questions", methods=["POST"])
-async def get_interview_questions():
-    db = await get_db()
+def get_interview_questions():
+    db = get_db()
+    cur = db.cursor()
+
     data = request.json
     user_id = data["user_id"]
     job_id = data.get("job_id")  # Get job_id if it exists in the request
 
-    cursor = await db.cursor()
-
     if job_id:
         # Filter interview questions by user_id and job_id
-        await cursor.execute("SELECT * FROM interview_questions WHERE user_id = ? AND job_id = ?", (user_id, job_id))
+        cur.execute("SELECT * FROM interview_questions WHERE user_id = %s AND job_id = %s", (user_id, job_id))
     else:
         # Filter interview questions only by user_id
-        await cursor.execute("SELECT * FROM interview_questions WHERE user_id = ?", (user_id,))
+        cur.execute("SELECT * FROM interview_questions WHERE user_id = %s", (user_id,))
 
-    interview_questions = await cursor.fetchall()
+    interview_questions = cur.fetchall()
 
     questions = [
         {
@@ -885,8 +909,10 @@ async def get_interview_questions():
     return jsonify(questions=questions)
 
 @app.route("/delete-interview-question", methods=["POST"])
-async def delete_interview_question():
-    db = await get_db()
+def delete_interview_question():
+    db = get_db()
+    cur = db.cursor()
+
     data = request.json
     user_id = data["user_id"]
     question_id = data["question_id"]
@@ -894,7 +920,6 @@ async def delete_interview_question():
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
     os.makedirs(user_embeddings_directory, exist_ok=True)
 
-    cursor = await db.cursor()
     try:
         embeddings = embedding_functions.OpenAIEmbeddingFunction(
             api_key=api_key,
@@ -912,8 +937,9 @@ async def delete_interview_question():
             ids=[str(question_id)]
         )
 
-        await cursor.execute("DELETE FROM interview_questions WHERE id = ? AND user_id = ?", (question_id, user_id))
-        await db.commit()
+        cur.execute("DELETE FROM interview_questions WHERE id = %s AND user_id = %s", (question_id, user_id))
+        db.commit()
+        cur.close()
         return jsonify(success=True, message="Interview question deleted successfully")
     except Exception as e:
         print(e)
@@ -921,9 +947,11 @@ async def delete_interview_question():
 
 
 @app.route("/save-answer", methods=["POST"])
-async def save_answer():
+def save_answer():
 
-    db = await get_db()
+    db = get_db()
+    cur = db.cursor()
+
     data = request.json
     user_id = data["user_id"]
     question_id = data["question_id"]
@@ -934,12 +962,12 @@ async def save_answer():
     os.makedirs(user_embeddings_directory, exist_ok=True)
 
     try:
-        cursor = await db.cursor()
-        await cursor.execute(
-            "UPDATE interview_questions SET answer = ? WHERE id = ?",
+        cur.execute(
+            "UPDATE interview_questions SET answer = %s WHERE id = %s",
             (answer, question_id),
         )
-        await db.commit()
+        db.commit()
+        cur.close()
 
         embeddings = embedding_functions.OpenAIEmbeddingFunction(
             api_key=api_key,
@@ -987,8 +1015,10 @@ async def save_answer():
         return jsonify(success=False, message="Error updating answer"), 500
     
 @app.route("/edit-answer", methods=["POST"])
-async def edit_answer():
-    db = await get_db()
+def edit_answer():
+    db = get_db()
+    cur = db.cursor()
+
     data = request.json
     user_id = data["user_id"]
     question_id = data["question_id"]
@@ -999,12 +1029,12 @@ async def edit_answer():
     os.makedirs(user_embeddings_directory, exist_ok=True)
 
     try:
-        cursor = await db.cursor()
-        await cursor.execute(
-            "UPDATE interview_questions SET answer = ? WHERE id = ?",
+        cur.execute(
+            "UPDATE interview_questions SET answer = %s WHERE id = %s",
             (answer, question_id),
         )
-        await db.commit()
+        db.commit()
+        cur.close()
 
         embeddings = embedding_functions.OpenAIEmbeddingFunction(
             api_key=api_key,
@@ -1048,8 +1078,10 @@ async def edit_answer():
         return jsonify(success=False, message="Error updating answer"), 500
 
 @app.route("/generate-recommendations", methods=["POST"])
-async def generate_recommendations():
-    db = await get_db()
+def generate_recommendations():
+    db = get_db()
+    cur = db.cursor()
+
     data = request.json
     user_id = data["user_id"]
     job_id = data.get("job_id")
@@ -1063,19 +1095,17 @@ async def generate_recommendations():
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
 
-    cursor = await db.cursor()
+    cur.execute(f"SELECT * FROM saved_jobs WHERE id = %s AND user_id = %s", (job_id, user_id,))
 
-    await cursor.execute(f"SELECT * FROM saved_jobs WHERE id = ? AND user_id = ?", (job_id, user_id,))
+    job = cur.fetchall()
 
-    job = await cursor.fetchall()
-
-    await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
+    cur.execute(f"SELECT * FROM resume WHERE section = %s AND user_id = %s", ("FULL RESUME",user_id,))
     
-    resume = await cursor.fetchall()
+    resume = cur.fetchall()
 
-    await cursor.execute(f"SELECT * FROM resume_recommendations WHERE user_id = ? AND job_id = ?", (user_id, job_id,))
+    cur.execute(f"SELECT * FROM resume_recommendations WHERE user_id = %s AND job_id = %s", (user_id, job_id,))
 
-    existing_recommendations = await cursor.fetchall()
+    existing_recommendations = cur.fetchall()
     recommendations_list = [row[2] for row in existing_recommendations]
     recommendations_str = ', '.join(f'"{question}"' for question in recommendations_list)
 
@@ -1138,13 +1168,14 @@ async def generate_recommendations():
 
         # Save the questions to the interview_questions table
         for recommendation in recommendation_list:
-            await cursor.execute(
-                "INSERT INTO resume_recommendations (user_id, job_id, version_id, recommendation) VALUES (?, ?, ?, ?)",
+            cur.execute(
+                "INSERT INTO resume_recommendations (user_id, job_id, version_id, recommendation) VALUES (%s, %s, %s, %s)",
                 (user_id, job_id, version_id ,recommendation),
             )
 
         # Commit the changes to the database
-        await db.commit()
+        db.commit()
+        cur.close()
 
         return jsonify(recommendations=recommendation_list)
     except Exception as e:
@@ -1152,8 +1183,10 @@ async def generate_recommendations():
         return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
 
 @app.route("/get-recommendations", methods=["POST"])
-async def get_recommendations():
-    db = await get_db()
+def get_recommendations():
+    db = get_db()
+    cur = db.cursor()
+
     data = request.json
     user_id = data["user_id"]
     version_id = data.get("version_id")
@@ -1161,20 +1194,20 @@ async def get_recommendations():
 
     print(data)
 
-    cursor = await db.cursor()
-
     # Fetch recommendations based on user_id and version_id
     # Replace 'recommendations' with the appropriate table name and columns
 
     if version_id:
 
-        await cursor.execute("SELECT * FROM resume_recommendations WHERE user_id = ? AND version_id = ?", (user_id, version_id))
+        cur.execute("SELECT * FROM resume_recommendations WHERE user_id = %s AND version_id = %s", (user_id, version_id))
 
     elif job_id:
         
-        await cursor.execute("SELECT * FROM resume_recommendations WHERE user_id = ? AND job_id = ?", (user_id, job_id))
+        cur.execute("SELECT * FROM resume_recommendations WHERE user_id = %s AND job_id = %s", (user_id, job_id))
         
-    recommendations = await cursor.fetchall()
+    recommendations = cur.fetchall()
+    db.commit()
+    cur.close()
 
     print("Recommendations fetched:", recommendations) 
 
@@ -1193,18 +1226,20 @@ async def get_recommendations():
 
 
 @app.route("/delete-recommendation", methods=["POST"])
-async def delete_recommendation():
-    db = await get_db()
+def delete_recommendation():
+    db = get_db()
+    cur = db.cursor()
+
     data = request.json
     user_id = data["user_id"]
     recommendation_id = data["recommendation_id"]
 
-    cursor = await db.cursor()
     try:
         # Delete the recommendation based on recommendation_id and user_id
         # Replace 'recommendations' with the appropriate table name
-        await cursor.execute("DELETE FROM resume_recommendations WHERE id = ? AND user_id = ?", (recommendation_id, user_id))
-        await db.commit()
+        cur.execute("DELETE FROM resume_recommendations WHERE id = %s AND user_id = %s", (recommendation_id, user_id))
+        db.commit()
+        cur.close()
         return jsonify(success=True, message="Recommendation deleted successfully")
     except Exception as e:
         print(e)
@@ -1212,16 +1247,18 @@ async def delete_recommendation():
 
 
 @app.route("/get-jobs", methods=["POST"])
-async def get_jobs():
-    db = await get_db()
+def get_jobs():
+    db = get_db()
+    cur = db.cursor()
+
     data = request.json
     user_id = data["user_id"]
     page = int(data.get("page", 1))
     items_per_page = int(data.get("itemsPerPage", 10))
 
-    cursor = await db.cursor()
-    await cursor.execute("SELECT * FROM saved_jobs WHERE user_id = ? ORDER BY date_created DESC LIMIT ? OFFSET ?", (user_id, items_per_page, (page - 1) * items_per_page))
-    saved_jobs = await cursor.fetchall()
+    cur.execute("SELECT * FROM saved_jobs WHERE user_id = %s ORDER BY date_created DESC LIMIT %s OFFSET %s", (user_id, items_per_page, (page - 1) * items_per_page))
+    saved_jobs = cur.fetchall()
+    cur.close()
 
     jobs = [
         {
@@ -1240,8 +1277,10 @@ async def get_jobs():
     return jsonify(jobs=jobs, headers=["Job Title/Role", "Company Name", "Job Description", "Status"])
 
 @app.route("/search-jobs", methods=["POST"])
-async def search_jobs():
-    db = await get_db()
+def search_jobs():
+    db = get_db()
+    cur = db.cursor()
+
     data = request.json
     user_id = data["user_id"]
     page = int(data.get("page", 1))
@@ -1249,13 +1288,17 @@ async def search_jobs():
     query = data.get("query")
     location = data.get("location")
 
-    cursor = await db.cursor()
+    threshold = datetime.now() - timedelta(days=1)
 
     # check if there is a row that has a date_added timestamp within the last 24 hours
-    await cursor.execute("SELECT * FROM jobs WHERE date_added > datetime('now','-1 day') AND user_id = ?", (user_id,))
-    recent_jobs = await cursor.fetchall()
-    await cursor.execute("SELECT job_title FROM users WHERE id = ?", (user_id,))
-    user_job_title = await cursor.fetchone()
+    cur.execute(
+        "SELECT * FROM jobs WHERE date_added > %s AND user_id = %s",
+        (threshold,
+        user_id),
+    )
+    recent_jobs = cur.fetchall()
+    cur.execute("SELECT job_title FROM users WHERE id = %s", (user_id,))
+    user_job_title = cur.fetchone()
 
     if not recent_jobs:
         
@@ -1304,16 +1347,20 @@ async def search_jobs():
         # Call the SERP API job search function if no recent jobs in the database
         job_results = call_serp_api(user_job_title, location)
         # Delete all rows from the jobs table
-        await cursor.execute("DELETE FROM jobs WHERE user_id = ?", (user_id,))
+        cur.execute("DELETE FROM jobs WHERE user_id = %s", (user_id,))
         # Save the job results to the database
         print(job_results)
         for job in job_results['jobs_results']:
-            await cursor.execute("INSERT INTO jobs (user_id, title, company_name, location, description, job_highlights, source, extensions, date_added) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))", (user_id, job["title"], job["company_name"], job["location"], job["description"], ', '.join(job["job_highlights"][0]['items']), job["via"],', '.join(job["extensions"]),))
-        await db.commit()
+            cur.execute("""
+                INSERT INTO jobs (user_id, title, company_name, location, description, job_highlights, source, extensions, date_added)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, current_timestamp)
+            """, (user_id, job["title"], job["company_name"], job["location"], job["description"], ', '.join(job["job_highlights"][0]['items']), job["via"],', '.join(job["extensions"])))
+        db.commit()
 
     # Fetch jobs from the database
-    await cursor.execute("SELECT * FROM jobs WHERE user_id = ? ORDER BY date_added DESC LIMIT ? OFFSET ?", (user_id, items_per_page, (page - 1) * items_per_page))
-    jobs = await cursor.fetchall()
+    cur.execute("SELECT * FROM jobs WHERE user_id = %s ORDER BY date_added DESC LIMIT %s OFFSET %s", (user_id, items_per_page, (page - 1) * items_per_page))
+    jobs = cur.fetchall()
+    cur.close()
 
     jobs = [
         {
@@ -1332,8 +1379,10 @@ async def search_jobs():
     return jsonify(jobs=jobs, headers=["Job Title", "Company Name", "Location", "Job Description", "Job Highlights"])
 
 @app.route("/create-job", methods=["POST"])
-async def create_job():
-    db = await get_db()
+def create_job():
+    db = get_db()
+    cur = db.cursor()
+
     data = request.json
     user_id = data["user_id"]
     job_title = data["job_title"]
@@ -1342,26 +1391,25 @@ async def create_job():
     status = data["status"]
     post_url = data.get("post_url")
     saved = data.get("saved")
-    job_id = data.get("id")
+    id = data.get("id")
     date_created = datetime.utcnow()
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
     os.makedirs(user_embeddings_directory, exist_ok=True)
 
-    print(user_id, job_id, saved)
+    print(user_id, id, saved)
 
-    cursor = await db.cursor()
-    await cursor.execute(
-        "INSERT INTO saved_jobs (user_id, job_title, company_name, job_description, status, post_url, date_created) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    cur.execute(
+        "INSERT INTO saved_jobs (user_id, job_title, company_name, job_description, status, post_url, date_created) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
         (user_id, job_title, company_name, job_description, status, post_url, date_created),
     )
 
+    job_id = cur.fetchone()[0]
+
     if saved:
-        await cursor.execute("UPDATE jobs SET saved = True WHERE user_id = ? AND id = ?", (user_id, job_id),)
+        cur.execute("UPDATE jobs SET saved = True WHERE user_id = %s AND id = %s", (user_id, id),)
 
-    await db.commit()
-
-    job_id = cursor.lastrowid
+    db.commit()
 
     job_string = f"""
     Job Title: {job_title}
@@ -1379,7 +1427,8 @@ async def create_job():
 
     try:
 
-        await db.commit()
+        db.commit()
+        cur.close()
 
         embeddings = embedding_functions.OpenAIEmbeddingFunction(
             api_key=api_key,
@@ -1440,8 +1489,10 @@ async def create_job():
 
 
 @app.route("/edit-job/<int:job_id>", methods=["PUT"])
-async def edit_joblication(job_id):
-    db = await get_db()
+def edit_joblication(job_id):
+    db = get_db()
+    cur = db.cursor()
+
     data = request.json
     user_id = data["user_id"]
     job_title = data["job_title"]
@@ -1450,31 +1501,32 @@ async def edit_joblication(job_id):
     status = data["status"]
     post_url = data["post_url"]
 
-    cursor = await db.cursor()
-    await cursor.execute(
-        "UPDATE saved_jobs SET user_id = ?, job_title = ?, company_name = ?, job_description = ?, status = ?, post_url = ? WHERE id = ?",
+    cur.execute(
+        "UPDATE saved_jobs SET user_id = %s, job_title = %s, company_name = %s, job_description = %s, status = %s, post_url = %s WHERE id = %s",
         (user_id, job_title, company_name, job_description, status, post_url, job_id),
     )
-    await db.commit()
+    db.commit()
+    cur.close()
 
     return jsonify(success=True, job_id=job_id)
 
 @app.route("/delete-job/<int:job_id>", methods=["DELETE"])
-async def delete_joblication(job_id):
+def delete_joblication(job_id):
     # Retrieve the user_id from the request body
     user_id = request.json.get('user_id')
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
     os.makedirs(user_embeddings_directory, exist_ok=True)
 
-    db = await get_db()
+    db = get_db()
 
-    cursor = await db.cursor()
+    cur = db.cursor()
     # Update the SQL DELETE statement to delete the record that matches both user_id and job_id
-    await cursor.execute(
-        "DELETE FROM saved_jobs WHERE id = ? AND user_id = ?", (job_id, user_id)
+    cur.execute(
+        "DELETE FROM saved_jobs WHERE id = %s AND user_id = %s", (job_id, user_id)
     )
-    await db.commit()
+    db.commit()
+    cur.close()
 
     embeddings = embedding_functions.OpenAIEmbeddingFunction(
         api_key=api_key,
@@ -1495,29 +1547,29 @@ async def delete_joblication(job_id):
     return jsonify(success=True)
 
 @app.route("/get-resume-versions", methods=["POST"])
-async def get_resume_versions():
-    db = await get_db()
+def get_resume_versions():
+    db = get_db()
     data = request.json
     user_id = data["user_id"]
     job_id = data.get("job_id")
     page = int(data.get("page", 1))
     items_per_page = int(data.get("itemsPerPage", 10))
 
-    cursor = await db.cursor()
+    cur = db.cursor()
 
     if job_id:
-        await cursor.execute("SELECT * FROM resume_versions WHERE user_id = ? AND job_id = ?", (user_id, job_id,))
+        cur.execute("SELECT * FROM resume_versions WHERE user_id = %s AND job_id = %s", (user_id, job_id,))
     else:
-        await cursor.execute("SELECT * FROM resume_versions WHERE user_id = ? LIMIT ? OFFSET ?", (user_id, items_per_page, (page - 1) * items_per_page))
+        cur.execute("SELECT * FROM resume_versions WHERE user_id = %s LIMIT %s OFFSET %s", (user_id, items_per_page, (page - 1) * items_per_page))
     
-    resume_versions = await cursor.fetchall()
+    resume_versions = cur.fetchall()
 
     versions = []
 
     for version in resume_versions:
         job_id = version[2]
-        await cursor.execute("SELECT * FROM saved_jobs WHERE id = ?", (job_id,))
-        job = await cursor.fetchone()
+        cur.execute("SELECT * FROM saved_jobs WHERE id = %s", (job_id,))
+        job = cur.fetchone()
 
         versions.append({
             "id": version[0],
@@ -1533,8 +1585,8 @@ async def get_resume_versions():
 
 
 @app.route("/create-resume-version", methods=["POST"])
-async def create_resume_version():
-    db = await get_db()
+def create_resume_version():
+    db = get_db()
     data = request.json
     user_id = data["user_id"]
     job_id = data["job_id"]
@@ -1546,15 +1598,17 @@ async def create_resume_version():
         temperature=0,
     )
 
-    cursor = await db.cursor()
+    print(job_id)
 
-    await cursor.execute(f"SELECT * FROM saved_jobs WHERE id = ? AND user_id = ?", (job_id, user_id,))
+    cur = db.cursor()
 
-    job = await cursor.fetchone()
+    cur.execute(f"SELECT * FROM saved_jobs WHERE id = %s AND user_id = %s", (job_id, user_id,))
 
-    await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
+    job = cur.fetchone()
+
+    cur.execute(f"SELECT * FROM resume WHERE section = %s AND user_id = %s", ("FULL RESUME",user_id,))
     
-    resume = await cursor.fetchall()
+    resume = cur.fetchone()[3]
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
 
@@ -1574,7 +1628,8 @@ async def create_resume_version():
 
     jobs_docs = chroma_collection_jobs.query(
         query_texts=["What are the important responsibilities, qualifications, skills, and requirements for this job?"],
-        n_results=4
+        n_results=4,
+        where={"job_id": job_id}
     )
 
     resume_docs = chroma_collection_resume.query(
@@ -1582,9 +1637,12 @@ async def create_resume_version():
         n_results=4
     )
 
+
     jobs_docs_texts = jobs_docs["documents"]
     jobs_docs_texts_flat = [doc for docs in jobs_docs_texts for doc in docs]
     jobs_docs_str = "\n\n".join(jobs_docs_texts_flat)
+
+    print(jobs_docs_str)
 
     resume_docs_texts = resume_docs["documents"]
     resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
@@ -1600,6 +1658,7 @@ async def create_resume_version():
 
     chain = LLMChain(
         llm=chat,
+        verbose=True,
         prompt=PromptTemplate.from_template(template_final)
     )
 
@@ -1610,22 +1669,22 @@ async def create_resume_version():
         recommendation_string = recommendation_response['text']
         recommendation_list = [re.sub(r'^\d+\.\s*', '', i) for i in recommendation_string.split('\n')]
 
-        await cursor.execute(
-            "INSERT INTO resume_versions (user_id, job_id, version_name) VALUES (?, ?, ?)",
-            (user_id, job_id, version_name),
+        cur.execute(
+            "INSERT INTO resume_versions (user_id, job_id, version_name, version_text) VALUES (%s, %s, %s, %s) RETURNING id",
+            (user_id, job_id, version_name, resume),
         )
 
-        version_id = cursor.lastrowid
+        version_id = cur.fetchone()[0]
 
         # Save the questions to the interview_questions table
         for recommendation in recommendation_list:
-            await cursor.execute(
-                "INSERT INTO resume_recommendations (user_id, job_id, version_id, recommendation) VALUES (?, ?, ?, ?)",
+            cur.execute(
+                "INSERT INTO resume_recommendations (user_id, job_id, version_id, recommendation) VALUES (%s, %s, %s, %s)",
                 (user_id, job_id, version_id ,recommendation),
             )
 
         # Commit the changes to the database
-        await db.commit()
+        db.commit()
 
         return jsonify({"id": version_id, "user_id": user_id, "job_id": job_id, "version_name": version_name, "job_title": job[2], "company_name": job[3]})
     
@@ -1636,38 +1695,39 @@ async def create_resume_version():
 
 
 @app.route("/edit-resume-version/<int:resume_version_id>", methods=["PUT"])
-async def edit_resume_version(resume_version_id):
-    db = await get_db()
+def edit_resume_version(resume_version_id):
+    db = get_db()
     data = request.json
     user_id = data["user_id"]
     job_id = data["job_id"]
     version_name = data["version_name"]
+    version_text = data["version_text"]
 
-    cursor = await db.cursor()
-    await cursor.execute(
-        "UPDATE resume_versions SET user_id = ?, job_id = ?, version_name = ? WHERE id = ?",
-        (user_id, job_id, version_name, resume_version_id),
+    cur = db.cursor()
+    cur.execute(
+        "UPDATE resume_versions SET user_id = %s, job_id = %s, version_name = %s, version_text = %s, WHERE id = %s",
+        (user_id, job_id, version_name, version_text, resume_version_id),
     )
-    await db.commit()
+    db.commit()
 
     return jsonify(success=True, resume_version_id=resume_version_id)
 
 
 @app.route("/delete-resume-version/<int:resume_version_id>", methods=["DELETE"])
-async def delete_resume_version(resume_version_id):
-    db = await get_db()
+def delete_resume_version(resume_version_id):
+    db = get_db()
 
-    cursor = await db.cursor()
-    await cursor.execute(
-        "DELETE FROM resume_versions WHERE id = ?", (resume_version_id,)
+    cur = db.cursor()
+    cur.execute(
+        "DELETE FROM resume_versions WHERE id = %s", (resume_version_id,)
     )
-    await db.commit()
+    db.commit()
 
     return jsonify(success=True)
 
 @app.route("/generate-cover-letter", methods=["POST"])
-async def generate_cover_letter():
-    db = await get_db()
+def generate_cover_letter():
+    db = get_db()
     data = request.json
     user_id = data["user_id"]
     job_id = data.get("job_id")
@@ -1681,15 +1741,15 @@ async def generate_cover_letter():
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
 
-    cursor = await db.cursor()
+    cur = db.cursor()
 
-    await cursor.execute(f"SELECT * FROM saved_jobs WHERE id = ? AND user_id = ?", (job_id, user_id,))
+    cur.execute(f"SELECT * FROM saved_jobs WHERE id = %s AND user_id = %s", (job_id, user_id,))
 
-    job = await cursor.fetchone()
+    job = cur.fetchone()
 
-    await cursor.execute(f"SELECT * FROM resume WHERE section = ? AND user_id = ?", ("FULL RESUME",user_id,))
+    cur.execute(f"SELECT * FROM resume WHERE section = %s AND user_id = %s", ("FULL RESUME",user_id,))
     
-    resume = await cursor.fetchone()
+    resume = cur.fetchone()
 
     print(job[4])
     print(resume[3])
@@ -1744,10 +1804,10 @@ async def generate_cover_letter():
         # Convert the questions string into a Python list
         string = response['text']
 
-        await cursor.execute("INSERT INTO cover_letter (user_id, job_id, cover_letter) VALUES (?, ?, ?)", (user_id, job_id , string),)
+        cur.execute("INSERT INTO cover_letter (user_id, job_id, cover_letter) VALUES (%s, %s, %s)", (user_id, job_id , string),)
 
         # Commit the changes to the database
-        await db.commit()
+        db.commit()
 
         return jsonify(cover_letter=string)
     except Exception as e:
@@ -1755,23 +1815,26 @@ async def generate_cover_letter():
         return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
     
 @app.route("/get-cover-letter", methods=["POST"])
-async def get_cover_letter():
-    db = await get_db()
+def get_cover_letter():
+    db = get_db()
     data = request.json
     user_id = data["user_id"]
-    version_id = data.get("version_id")
     job_id = data.get("job_id")
 
     print(data)
 
-    cursor = await db.cursor()
+    cur = db.cursor()
 
     # Fetch recommendations based on user_id and version_id
     # Replace 'recommendations' with the appropriate table name and columns
 
-    await cursor.execute("SELECT * FROM cover_letter WHERE user_id = ? AND job_id = ?", (user_id, job_id))
+    cur.execute("SELECT * FROM cover_letter WHERE user_id = %s AND job_id = %s", (user_id, job_id))
         
-    cover_letter = await cursor.fetchone()
+    cover_letter = cur.fetchone()
+
+    # If cover_letter is None, return a specific message
+    if cover_letter is None:
+        return jsonify(message="No cover letter found for the provided user_id and job_id."), 404
 
     cover_letter_data = [
         {
@@ -1779,37 +1842,37 @@ async def get_cover_letter():
             "user_id": cover_letter[1],
             "job_id": cover_letter[2],
             "cover_letter" : cover_letter[3]
-
         }
     ]
 
     return jsonify(cover_letter=cover_letter[3])
 
+
 @app.route("/delete-cover-letter", methods=["POST"])
-async def delete_cover_letter():
-    db = await get_db()
+def delete_cover_letter():
+    db = get_db()
     data = request.json
     user_id = data["user_id"]
     cover_letter_id = data["cover_letter_id"]
 
-    cursor = await db.cursor()
+    cur = db.cursor()
     try:
         # Delete the recommendation based on recommendation_id and user_id
         # Replace 'recommendations' with the appropriate table name
-        await cursor.execute("DELETE FROM cover_letter WHERE id = ? AND user_id = ?", (cover_letter_id, user_id))
-        await db.commit()
+        cur.execute("DELETE FROM cover_letter WHERE id = %s AND user_id = %s", (cover_letter_id, user_id))
+        db.commit()
         return jsonify(success=True, message="Cover letter deleted successfully")
     except Exception as e:
         print(e)
         return jsonify(success=False, message="Error deleting the cover letter")
 
 @app.route("/get-database-tables", methods=["GET"])
-async def get_database_tables():
+def get_database_tables():
     try:
-        db = await get_db()
-        cur = await db.cursor()
-        await cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence'")
-        rows = await cur.fetchall()
+        db = get_db()
+        cur = db.cursor()
+        cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
+        rows = cur.fetchall()
         table_names = list(map(lambda row: {"name": row[0]}, rows))
         return jsonify(tables=table_names)
     except Exception as e:
@@ -1818,11 +1881,11 @@ async def get_database_tables():
 
 
 @app.route("/get-table-data/<string:table_name>", methods=["GET"])
-async def get_table_data_route(table_name):
+def get_table_data_route(table_name):
     user_id = request.args.get("user_id")
     
     try:
-        table_data = await get_table_data(table_name, user_id)
+        table_data = get_table_data(table_name, user_id)
         print(table_data)
         return table_data
     except Exception as e:
@@ -1830,11 +1893,11 @@ async def get_table_data_route(table_name):
         return jsonify(error="An error occurred while fetching table data."), 500
     
 @app.route("/delete-row/<string:table_name>/<int:row_id>", methods=["DELETE"])
-async def delete_row_route(table_name, row_id):
+def delete_row_route(table_name, row_id):
     user_id = request.args.get("user_id")
     
     try:
-        deleted_rows = await delete_row(table_name, user_id, row_id)
+        deleted_rows = delete_row(table_name, row_id, user_id)
         return jsonify(deleted_rows=deleted_rows)
     except Exception as e:
         print(f"Error deleting row {row_id} from table {table_name}:", e)
@@ -1843,27 +1906,26 @@ async def delete_row_route(table_name, row_id):
     
 
 @app.route("/get-messages", methods=["GET"])
-async def get_messages_route():
+def get_messages_route():
     user_id = request.args.get("user_id")
     chat_id = request.args.get("chat_id")
 
     try:
-        messages = await get_messages_by_chat_id(chat_id, user_id)
+        messages = get_messages_by_chat_id(chat_id, user_id)
         return jsonify(messages)
     except Exception as e:
         print(f"Error fetching messages for chat_id {chat_id}:", e)
         return jsonify(error="An error occurred while fetching messages."), 500
 
-async def get_messages_by_chat_id(chat_id, user_id):
-    db = await get_db()
+def get_messages_by_chat_id(chat_id, user_id):
+    db = get_db()
 
-    cursor = await db.cursor()
+    cur = db.cursor()
 
-    await cursor.execute("SELECT * FROM messages WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
+    cur.execute("SELECT * FROM messages WHERE chat_id = %s AND user_id = %s", (chat_id, user_id))
+    rows = cur.fetchall()
         
-    column_names = [column[0] for column in cursor.description]
-        
-    rows = await cursor.fetchall()
+    column_names = [column[0] for column in cur.description]
         
     result = [dict(zip(column_names, row)) for row in rows]
         

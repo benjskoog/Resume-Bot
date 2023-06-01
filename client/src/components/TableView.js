@@ -12,6 +12,7 @@ function TableView() {
 
 async function deleteRow(rowId) {
   try {
+    console.log(rowId)
     const response = await axios.delete(
       `${backendUrl}/delete-row/${tableName}/${rowId}`,
       { params: { user_id: user.id } }

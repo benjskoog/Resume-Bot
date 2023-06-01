@@ -61,16 +61,16 @@ resume_col = chroma_client.get_collection(name="resume", embedding_function=embe
 
 jobs_col = chroma_client.get_collection(name="jobs", embedding_function=embeddings)
 
-questions_col = chroma_client.get_collection(name="questions", embedding_function=embeddings)
+# questions_col = chroma_client.get_collection(name="questions", embedding_function=embeddings)
 
 resume_docs = resume_col.get()
 
-jobs_docs = jobs_col.get()
+jobs_docs = jobs_col.get(where={"job_id": 0})
 
-questions_docs = questions_col.get()
+# questions_docs = questions_col.get()
 
 print(f"""Resume docs: {resume_docs} """)
 
 print(f"""Jobs docs: {jobs_docs} """)
 
-print(f"""Questions docs: {questions_docs} """)
+# print(f"""Questions docs: {questions_docs} """)

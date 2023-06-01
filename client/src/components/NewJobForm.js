@@ -5,12 +5,23 @@ import InterviewQuestionsForm from './InterviewQuestionsForm';
 import RecommendationsForm from './RecommendationsForm';
 import CoverLetter from './CoverLetter';
 
+const calculateRows = (text) => {
+    if (text) {
+        console.log(text);
+      const numOfLines = (text.match(/\n/g) || '').length + 1;
+      return numOfLines;
+    }
+    return 5;  // default rows for blank text
+  }
+  
+
 const NewJobForm = ({ jobExists, currentJob, handleSave, showForm }) => {
   const [form, setForm] = useState(currentJob);
   const { user, setUser, logout } = useContext(UserContext);
   const [showFields, setShowFields] = useState(true);
   const [showInterviewQuestions, setShowInterviewQuestions] = useState(true);
   const [showRecommendations, setShowRecommendations] = useState(true);
+  const [rows, setRows] = useState(calculateRows(form.job_description));
   const options = [
     { value: 'NotStarted', label: 'Not Started' },
     { value: 'InProgress', label: 'In Progress' },
@@ -23,6 +34,10 @@ const NewJobForm = ({ jobExists, currentJob, handleSave, showForm }) => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm({ ...form, [name]: value });
+    // update rows when version_text changes
+    if (name === 'job_description') {
+      setRows(calculateRows(value));
+    }
     console.log(form)
     console.log(currentJob)
   };
@@ -94,7 +109,7 @@ const NewJobForm = ({ jobExists, currentJob, handleSave, showForm }) => {
             name="job_description"
             value={form.job_description || ""}
             onChange={handleChange}
-            rows="5" // You can adjust the number of rows to control the height of the text box
+            rows={rows} // You can adjust the number of rows to control the height of the text box
             className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
             placeholder=""
             required

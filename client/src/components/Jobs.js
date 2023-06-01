@@ -36,32 +36,34 @@ function Jobs() {
 }
 
 async function saveJob(job) {
-    setLoading(true);
+  setLoading(true);
 
-    try {
-        const response = await axios.post(`${backendUrl}/create-job`, {
-            id: job.id,
-            user_id: user.id,
-            job_title: job.title,
-            company_name: job.company_name,
-            job_description: job.description,
-            saved: true,
-            status: "Not Started", // Adapt to your use case
-        });
+  try {
+      const response = await axios.post(`${backendUrl}/create-job`, {
+          id: job.id,
+          user_id: user.id,
+          job_title: job.title,
+          company_name: job.company_name,
+          job_description: job.description,
+          saved: true,
+          status: "Not Started", // Adapt to your use case
+      });
 
-        if(response.data.success) {
-            console.log("Job saved successfully");
-            // You can add additional logic here like showing a success message to the user
-            fetchJobs(); // Refresh jobs after saving a job
-        } else {
-            console.error("Error saving job:", response.data.message);
-            // Here you can add logic to handle when saving a job fails, like showing an error message to the user
-        }
-    } catch (error) {
-        console.error("Error saving job:", error);
-    } finally {
-        setLoading(false);
-    }
+      if(response.data.success) {
+          console.log("Job saved successfully");
+          // You can add additional logic here like showing a success message to the user
+
+          // Update the state of the specific job that was saved.
+          setJobs(jobs.map(item => item.id === job.id ? {...item, saved: true} : item));
+      } else {
+          console.error("Error saving job:", response.data.message);
+          // Here you can add logic to handle when saving a job fails, like showing an error message to the user
+      }
+  } catch (error) {
+      console.error("Error saving job:", error);
+  } finally {
+      setLoading(false);
+  }
 }
 
 useEffect(() => {

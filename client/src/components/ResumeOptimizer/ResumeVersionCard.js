@@ -1,25 +1,21 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useLocation, useNavigate  } from 'react-router-dom';
 import ResumeVersionForm from './ResumeVersionForm';
-import UserContext from './UserContext';
+import UserContext from '../UserContext';
 import axios from 'axios';
 
-const ResumeOptimizer = () => {
+const ResumeVersionCard = ({ jobId }) => {
   const [resumes, setResumes] = useState([]);
   const [selectedResume, setSelectedResume] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(100); // Change this to your desired number of items per page
   const { user, setUser, logout } = useContext(UserContext);
   const navigate = useNavigate();
   const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   const handleSave = async (updatedResume) => {
-    setLoading(true);
     try {
-      let newVersion;
       if (selectedResume === null) {
         // Create a new job resume
         const response = await axios.post(`${backendUrl}/create-resume-version`, {
@@ -28,39 +24,36 @@ const ResumeOptimizer = () => {
           version_name: updatedResume.version_name,
         });
   
-        newVersion = response.data;
+        const newVersion = response.data;
+        setResumes([...resumes, newVersion]);
       } else {
         // Edit an existing job resume
         const response = await axios.put(`${backendUrl}/edit-resume-version/${resumes[selectedResume].id}`, {
             user_id: user.id,
             job_id: updatedResume.job_id,
             version_name: updatedResume.version_name,
-            version_text: updatedResume.version_text
         });
   
         // Use the spread operator to create a new object with the updated properties
-        newVersion = {
+        const editedVersion = {
           ...resumes[selectedResume],
           job_id: updatedResume.job_id,
           version_name: updatedResume.version_name,
+          recommendation: updatedResume.recommendation
         };
+  
+        setResumes(
+          resumes.map((version, index) =>
+            index === selectedResume ? editedVersion : version
+          )
+        );
       }
-  
-      setResumes((prevResumes) => {
-        if (selectedResume === null) {
-          return [...prevResumes, newVersion];
-        } else {
-          return prevResumes.map((version, index) => (index === selectedResume ? newVersion : version));
-        }
-      });
-  
       setSelectedResume(null);
       setShowForm(false);
-      setLoading(false);
     } catch (error) {
       console.error('Error saving job resume:', error);
     }
-  };  
+  };
 
   const handleDelete = async (index) => {
     try {
@@ -82,21 +75,6 @@ const ResumeOptimizer = () => {
     setShowForm(true);
 
   };
-
-  const handleNewVersion = () => {
-    setShowForm(true);
-    setSelectedResume(null);
-  };
-
-  const handlePrevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
-  
-  const handleNextPage = () => {
-    setCurrentPage(currentPage + 1);
-  };
   
 
   useEffect(() => {
@@ -105,7 +83,7 @@ const ResumeOptimizer = () => {
       try {
         const response = await axios.post(`${backendUrl}/get-resume-versions`, {
           user_id: user.id,
-          job_id: null
+          job_id: jobId
         });
         const data = response.data;
         console.log(data);
@@ -118,15 +96,15 @@ const ResumeOptimizer = () => {
     };
   
     fetchResumes();
-  }, [currentPage]);
+  }, []);
 
   useEffect(() => {
     async function fetchJobs() {
             try {
               const response = await axios.post(`${backendUrl}/get-jobs`, {
                 user_id: user.id,
-                page: currentPage,
-                itemsPerPage: itemsPerPage,
+                page: 1,
+                itemsPerPage: 50,
               });
               const data = response.data;
               console.log(data);
@@ -137,7 +115,7 @@ const ResumeOptimizer = () => {
             }  
     }
     fetchJobs();
-  }, [currentPage]);
+  }, []);
 
   useEffect(() => {
     const handleMouseUp = (e) => {
@@ -172,17 +150,6 @@ const ResumeOptimizer = () => {
     <div className="overflow-y-auto antialiased bg-gray-200 h-[calc(100vh-72px)]">
     <div className="container mx-auto px-4 sm:px-8">
         <div className="py-8">
-            <div>
-                <h2 className="text-2xl font-semibold leading-tight">Optimize your resume for each job!</h2>
-            </div>
-            <button
-                onClick={handleNewVersion}
-                type="button"
-                className="mb-4 mt-8 flex-shrink-0 inline-block rounded bg-blue-500 px-8 pb-2.5 pt-2.5 text-xs font-medium uppercase leading-normal text-white shadow-[0_4px_9px_-4px_#3b71ca] transition duration-150 ease-in-out hover:bg-primary-600 hover:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] focus:bg-primary-600 focus:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] focus:outline-none focus:ring-0 active:bg-primary-700 active:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] dark:shadow-[0_4px_9px_-4px_rgba(59,113,202,0.5)] dark:hover:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)] dark:focus:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)] dark:active:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)]"
-                data-te-ripple-init
-                data-te-ripple-color="light">
-                New Resume Version
-            </button>
             <div className="-mx-4 sm:-mx-8 px-4 sm:px-8 py-4 overflow-x-auto">
               <div className="inline-block min-w-full shadow rounded-lg overflow-hidden">
               <div className="relative">
@@ -269,25 +236,12 @@ const ResumeOptimizer = () => {
                     ))}
                   </tbody>
                 </table>
-                <div
+                    <div
                         className="px-5 py-5 bg-white border-t flex flex-col xs:flex-row items-center xs:justify-between          ">
                         <span className="text-xs xs:text-sm text-gray-900">
-                            Showing 1 to 4 of 50 Entries
+                            
                         </span>
-                        <div className="inline-flex mt-2 xs:mt-0">
-                        <button
-                          onClick={handlePrevPage}
-                          className="text-sm bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-l"
-                        >
-                          Prev
-                        </button>
-                        <button
-                          onClick={handleNextPage}
-                          className="text-sm bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-r"
-                        >
-                          Next
-                        </button>
-                        </div>
+
                     </div>
                 </div>
             </div>
@@ -300,4 +254,4 @@ const ResumeOptimizer = () => {
   );
 };
 
-export default ResumeOptimizer;
+export default ResumeVersionCard;

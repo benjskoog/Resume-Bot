@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useLocation, useNavigate  } from 'react-router-dom';
 import NewJobForm from './NewJobForm';
-import UserContext from './UserContext';
+import UserContext from '../User/UserContext';
 import axios from 'axios';
 
 const SavedJobs = () => {

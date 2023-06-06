@@ -65,7 +65,11 @@ jobs_col = chroma_client.get_collection(name="jobs", embedding_function=embeddin
 
 resume_docs = resume_col.get()
 
-jobs_docs = jobs_col.get(where={"job_id": 0})
+jobs_docs = jobs_col.query(
+    query_texts=["Google"],
+    n_results=4,
+
+)
 
 # questions_docs = questions_col.get()
 

@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect } from 'react';
 import axios from 'axios';
-import UserContext from './UserContext';
+import UserContext from '../User/UserContext';
 
 function QuestionModal({ question, closeModal, setIsModalOpen, submit }) {
   const [answer, setAnswer] = useState(question.answer || '');
@@ -52,6 +52,30 @@ function QuestionModal({ question, closeModal, setIsModalOpen, submit }) {
     setLoading(false); // Set loading to false after the request has completed
   };
 
+  const improveAnswer = async () => {
+    const proxyEndpoint = `${backendUrl}/improve-answer`;
+    const data = {
+      id: user.id,
+      question_id: question.id,
+      question_answer: question.answer,
+      query: question.question,
+      job_id: question.job_id,
+      type: "improve"
+    };
+  
+    setLoading(true); // Set loading to true before making the request
+    try {
+      const response = await axios.post(proxyEndpoint, data);
+      console.log(response.data)
+      const result = response.data.answer;
+      setAnswer(result);
+      setRecommendation(response.data.recommendation)
+    } catch (error) {
+      console.error('Error improving answer:', error);
+    }
+    setLoading(false); // Set loading to false after the request has completed
+  };
+
   useEffect(() => {
     if (question.recommendation) {
       setRecommendation(question.recommendation);
@@ -77,12 +101,20 @@ function QuestionModal({ question, closeModal, setIsModalOpen, submit }) {
             </div>
           )}
         <div className="flex justify-between mt-4">
+          <div>
           <button
-            className="bg-green-500 text-white px-4 py-2 rounded"
+            className="bg-green-500 text-white px-4 py-2 rounded mr-2"
             onClick={getAnswerHelp}
           >
             Help me answer
           </button>
+          <button
+            className="bg-green-500 text-white px-4 py-2 rounded"
+            onClick={improveAnswer}
+          >
+            Improve my answer
+          </button>
+          </div>
           <div>
             <button
               className="bg-blue-500 text-white px-4 py-2 rounded mr-2"

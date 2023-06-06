@@ -225,7 +225,7 @@ def forgot_password():
 
     # Save the token in the database with an expiration time
     cur.execute("INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (%s, %s, NOW() + INTERVAL '1 hour')",
-                     user[0], reset_token)
+                     (user[0], reset_token))
     db.commit()
     cur.close()
 
@@ -296,8 +296,35 @@ def update_password():
     db.commit()
     cur.close()
 
-    return jsonify({"type": "success", "message": "Password has been successfully updated"}), 200
+    return jsonify({"type": "success", "id": user[0], "email": user[5], "first_name": user[1], "last_name": user[2], "job_title": user[3], "location": user[4]}), 200
 
+@app.route("/update-profile", methods=["PUT"])
+def update_profile():
+    data = request.get_json()
+    email = data.get("email")
+    location = data.get("location")
+    job_title = data.get("job_title")
+    first_name = data.get("first_name")
+    last_name = data.get("last_name")
+
+    db = get_db()
+    cur = db.cursor()
+
+    print(email)
+
+    # Find the user by email
+    cur.execute("SELECT * FROM users WHERE email=%s", (email, ))
+    user = cur.fetchone()
+    print(user)
+
+    if not user:
+        return jsonify({"type" : "error", "message": "User not found"}), 404
+
+    cur.execute("UPDATE users SET job_title=%s, location=%s, first_name=%s, last_name=%s WHERE id=%s", (job_title, location, first_name, last_name, user[0]))
+    db.commit()
+    cur.close()
+
+    return jsonify({"type": "success", "id": user[0], "email": user[5], "first_name": user[1], "last_name": user[2], "job_title": user[3], "location": user[4]}), 200
 
 
 @app.route("/profile", methods=["GET"])
@@ -580,9 +607,6 @@ def gpt_api_call():
         
         context = context
 
-
-    print(chroma_collection_resume.peek())
-
     chat = ChatOpenAI(
         model_name="gpt-3.5-turbo",
         openai_api_key=api_key,
@@ -591,7 +615,7 @@ def gpt_api_call():
 
     template_chat_1 = f"""You are an intelligent career personal assistant and your job is to help {first_name} with all things career related. You may be asked to help improve their resume, help with their job applications, prepare for interviews, answer recruiter questions and more. Below is relevant information you can use to answer any questions {first_name} may have. Do not make anything up.\n""" 
 
-    template_chat = template_chat_1 + f"""Relevant information:\n {context}\n"""
+    template_chat = template_chat_1 + f"""{context}\n"""
 
     final_template = template_chat + """{history}\n User question: {input}\n Assistant:"""
 
@@ -601,10 +625,11 @@ def gpt_api_call():
         template=final_template      
         )
 
-    chain_id = form_values.get("chainId") or str(int(time.time()))  # Generate a unique identifier based on the current timestamp
+    chain_id = form_values.get("chainId")
 
     chain = chains.get(chain_id)
-    print(chain)
+
+    chat_id = None
 
     if not chain:
         chain = ConversationChain(
@@ -614,13 +639,14 @@ def gpt_api_call():
             memory=ConversationBufferWindowMemory(k=2),
         )
 
-        chains[chain_id] = chain
+        cur.execute("INSERT INTO chat (user_id, chat_name) VALUES (%s, %s) RETURNING id", (user_id, query))
+        chat_id = cur.fetchone()[0]
 
-        cur.execute("INSERT INTO chat (user_id, chat_id, chat_name) VALUES (%s, %s, %s)", (user_id, chain_id, query))
+        chains[chat_id] = chain
+
         db.commit()
     
     try:
-        print(chain)
         result_endpoint = chain.predict(input=query)
         answer = result_endpoint
         print(answer)
@@ -628,11 +654,11 @@ def gpt_api_call():
         timestamp = datetime.now().isoformat()
         cur.execute(
         "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (%s, %s, %s, %s, %s)",
-        ("user", user_id, chain_id, query, timestamp)
+        ("user", user_id, chat_id, query, timestamp)
         )
         cur.execute(
             "INSERT INTO messages (type, user_id, chat_id, message, timestamp) VALUES (%s, %s, %s, %s, %s)",
-            ("bot", user_id, chain_id, answer, timestamp)
+            ("bot", user_id, chat_id, answer, timestamp)
         )
         db.commit()
         cur.close()
@@ -707,12 +733,12 @@ def get_answer_help():
 
         Please improve the user's answer based on the information below and provide a recommendation to them on how they can better answer the question. 
         
-        Your response must be in JSON with the following properties: "answer": "" , "recommendation": "". Relevant information is provided below. Do not make anything up.\n""" + f"""User's current answer: {question_answer}\n"""
+        Your response must be in JSON format with the following properties: "answer": "<Your answer here>", "recommendation": "<Your recommendation here>". Relevant information is provided below. Do not make anything up.\n""" + f"""User's current answer: {question_answer}\n"""
     else:
 
         template_base = """You are an intelligent career bot and your job is to help users improve their resume, speak more effectively about their work experience, and provide career guidance. In this case, the user is trying to prepare answers to interview questions specific to their role.
 
-        Please answer the question from the user's perspective and provide a recommendation to the user on what they need to include to improve the answer you provided. Your response must be in JSON with the following properties: "answer" : "", "recommendation": "". Relevant information is provided below. Do not make anything up.\n"""
+        Please answer the question from the user's perspective and provide a recommendation to the user on what they need to include to improve the answer you provided. Your response must be in JSON format with the following properties: "answer": "<Your answer here>", "recommendation": "<Your recommendation here>". Relevant information is provided below. Do not make anything up.\n"""
 
     if job_id:
 
@@ -726,11 +752,11 @@ def get_answer_help():
         job_docs_texts_flat = [doc for docs in job_docs_texts for doc in docs]
         job_docs_str = "\n\n".join(job_docs_texts_flat)
 
-        template_help = template_base + f"""Information from a job post the user is applying to:\n {job_docs_str}""" + f"""\nInformation from the users resume:\n {resume_docs_str}""" + f"""\nInterview questions that have been answered by the user:\n {questions_docs_str}"""
+        template_help = template_base + f"""\n\nInformation from the job post the user is applying to:\n {job_docs_str}""" + f"""\n\nInformation from the user's resume:\n {resume_docs_str}"""
 
     else:
 
-        template_help = template_base + f"""\nInformation from the users resume:\n {resume_docs_str}""" + f"""\nInterview questions that have been answered by the user:\n {questions_docs_str}"""
+        template_help = template_base + f"""\n\nInformation from the user's resume:\n {resume_docs_str}"""
 
     template_final = template_help + """\nInterview question: {context}"""
 
@@ -739,12 +765,12 @@ def get_answer_help():
 
     chain = LLMChain(
         llm=chat,
+        verbose=True,
         prompt=PromptTemplate.from_template(template_final)
     )
     
     try:
         result_endpoint = chain.run(query)
-        print(result_endpoint)
         answer = json.loads(result_endpoint)
         print(answer)
 
@@ -760,6 +786,93 @@ def get_answer_help():
     except Exception as e:
         print(e)
         return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
+
+@app.route("/improve-answer", methods=["POST"])
+def improve_answer():
+    db = get_db()
+    cur = db.cursor()
+
+    form_values = request.json
+    query = form_values["query"]
+    user_id = form_values["id"]
+    question_id = form_values["question_id"]
+    question_answer = form_values.get("question_answer")
+    job_id = form_values.get("job_id")
+    print(user_id)
+
+    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
+
+    embeddings = embedding_functions.OpenAIEmbeddingFunction(
+        api_key=api_key,
+        model_name="text-embedding-ada-002"
+    )
+
+    chroma_client = chromadb.Client(Settings(
+        chroma_db_impl="duckdb+parquet",
+        persist_directory=user_embeddings_directory
+    ))
+
+    chroma_collection_jobs = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
+
+    chroma_collection_resume = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
+
+    resume_docs = chroma_collection_resume.query(
+        query_texts=[query],
+        n_results=2
+    )
+
+    resume_docs_texts = resume_docs["documents"]
+    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
+    resume_docs_str = "\n\n".join(resume_docs_texts_flat)
+
+    jobs_docs = chroma_collection_jobs.query(
+        query_texts=["job or role description"],
+        n_results=2,
+        where={"job_id": job_id}
+    )
+
+    jobs_docs_texts = jobs_docs["documents"]
+    jobs_docs_texts_flat = [doc for docs in jobs_docs_texts for doc in docs]
+    jobs_docs_str = "\n\n".join(jobs_docs_texts_flat)
+
+
+
+    chat = ChatOpenAI(
+        model_name="gpt-3.5-turbo",
+        openai_api_key=api_key,
+        temperature=0,
+    )
+
+    if question_answer:
+
+        template_base = """You are an intelligent career bot and your job is to help users improve their resume, speak more effectively about their work experience, and provide career guidance. In this case, the user is trying to improve their answer to an interview question.
+
+        Please suggest improvements to the user's answer based on the information below. Provide a more improved answer and also recommendations on how to approach similar questions in future. The improved answer should be better worded and include any relevant information from the information provided to you.
+
+        Your response must be in JSON with the following properties: "answer": "" , "recommendation": "". Relevant information is provided below. Do not make anything up.\n""" + f"""Interview question user is answering: {query}\n"""
+
+    template_final = template_base + """\nUser's interview question answer: {context}""" + f"""\nInformation from the users resume:\n {resume_docs_str}""" + f"""\nInformation from the job application:\n {jobs_docs_str}"""
+
+    chain = LLMChain(
+        llm=chat,
+        verbose=True,
+        prompt=PromptTemplate.from_template(template_final)
+    )
+
+    try:
+        result_endpoint = chain.run(question_answer)
+        improved_answer = json.loads(result_endpoint)
+        print(improved_answer)
+
+        db.commit()  # Commit the changes to the database
+        cur.close()
+
+        return jsonify(improved_answer)
+    except Exception as e:
+        print(e)
+        return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
+
+
 
 @app.route("/generate-interview-questions", methods=["POST"])
 def generate_interview_questions():
@@ -778,20 +891,20 @@ def generate_interview_questions():
     db = get_db()
     cur = db.cursor()
 
-    cur.execute(f"SELECT * FROM interview_questions WHERE user_id = %s", (user_id,))
+    cur.execute(f"SELECT * FROM interview_questions WHERE user_id = %s AND job_id = %s", (user_id, job_id))
 
     existing_questions = cur.fetchall()
-    questions_list = [row[2] for row in existing_questions]
+    questions_list = [row[3] for row in existing_questions]
     questions_str = ', '.join(f'"{question}"' for question in questions_list)
 
     if question_type == 'WorkExperience':
-        type_string = "specific to their work experience"
+        type_string = "that are specifically relevant to their work experience"
     
     if question_type =="RoleBased":
-        type_string = "specific to their industry and role"
+        type_string = "that are specifically relevant to the job"
 
     if question_type =="Technical":
-        type_string = "specific to their technical capabilities"
+        type_string = "that are specifically relevant to their technical capabilities"
 
     user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
 
@@ -826,13 +939,13 @@ def generate_interview_questions():
 
         print(job[0][4])
 
-        template_questions_base = f"""Below is a user's resume and the description for a job they are applying to. Please return 3 interview questions {type_string} that they might be asked during an interview for this job. Please return the questions separated by newlines.
+        template_questions_base = f"""Below is a user's resume and the description for a job they are applying to. Based on the job responsibilities and user's qualifications, please generate 3 interview questions {type_string}. The questions should be related to key skills and experiences required for this job. Please return the questions separated by newlines.
         
         Job Description user is applying to:\n {job[0][4]}\n
         """
 
     else:
-        template_questions_base = f"""Below is a user's resume. Please return 3 interview questions {type_string} that they might be asked during an interview. Please return the questions separated by newlines."""
+        template_questions_base = f"""Below is a user's resume and the description for a job they are applying to. Based on the job responsibilities and user's qualifications, please generate 3 interview questions {type_string}. The questions should be related to key skills and experiences required for this job. Please return the questions separated by newlines."""
 
         cur.execute(f"SELECT * FROM resume WHERE section = %s AND user_id = %s", ("FULL RESUME",user_id,))
         resume = cur.fetchall()
@@ -842,7 +955,7 @@ def generate_interview_questions():
     else:
         exclude_similar = ""
 
-    template_final = template_questions_base + """Information from the user's Resume:\n {context} """ + exclude_similar
+    template_final = template_questions_base + """Information from the user's Resume:\n {context} \n""" + exclude_similar
 
 
     chain = LLMChain(
@@ -1101,7 +1214,7 @@ def generate_recommendations():
 
     cur.execute(f"SELECT * FROM resume WHERE section = %s AND user_id = %s", ("FULL RESUME",user_id,))
     
-    resume = cur.fetchall()
+    resume = cur.fetchone()[3]
 
     cur.execute(f"SELECT * FROM resume_recommendations WHERE user_id = %s AND job_id = %s", (user_id, job_id,))
 
@@ -1141,7 +1254,7 @@ def generate_recommendations():
     resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
     resume_docs_str = "\n\n".join(resume_docs_texts_flat)
 
-    template_questions_base = f"""Below is relevant information from a user's resume and the description of a job they are applying to. Please provide 5 recommendations to the user on how they can update their resume to increase their chances of landing an interview. Please return the recommendations separated by newlines.
+    template_questions_base = f"""Based on the following details about my resume and the job I am applying to, please provide me 5 recommendations on how I can update my resume to increase my chances of landing an interview. The recommendations should cover different areas such as skills, work experience, projects, and format. Each recommendation should be justified in terms of how it matches with the job description or enhances my profile. Please return the recommendations separated by newlines.
         
     Job Description Information: {jobs_docs_str}"""
 
@@ -1160,7 +1273,7 @@ def generate_recommendations():
     )
 
     try:
-        recommendation_response = chain(resume_docs_str)
+        recommendation_response = chain(resume)
         print(recommendation_response)
         # Convert the questions string into a Python list
         recommendation_string = recommendation_response['text']
@@ -1169,8 +1282,8 @@ def generate_recommendations():
         # Save the questions to the interview_questions table
         for recommendation in recommendation_list:
             cur.execute(
-                "INSERT INTO resume_recommendations (user_id, job_id, version_id, recommendation) VALUES (%s, %s, %s, %s)",
-                (user_id, job_id, version_id ,recommendation),
+                "INSERT INTO resume_recommendations (user_id, job_id, recommendation) VALUES (%s, %s, %s)",
+                (user_id, job_id, recommendation),
             )
 
         # Commit the changes to the database
@@ -1196,14 +1309,8 @@ def get_recommendations():
 
     # Fetch recommendations based on user_id and version_id
     # Replace 'recommendations' with the appropriate table name and columns
-
-    if version_id:
-
-        cur.execute("SELECT * FROM resume_recommendations WHERE user_id = %s AND version_id = %s", (user_id, version_id))
-
-    elif job_id:
         
-        cur.execute("SELECT * FROM resume_recommendations WHERE user_id = %s AND job_id = %s", (user_id, job_id))
+    cur.execute("SELECT * FROM resume_recommendations WHERE user_id = %s AND job_id = %s", (user_id, job_id))
         
     recommendations = cur.fetchall()
     db.commit()
@@ -1268,8 +1375,8 @@ def get_jobs():
             "company_name": job[3],
             "job_description": job[4],
             "status": job[5],
-            "date_added": job[6],
-            "post_url": job[7],
+            "post_url": job[6],
+            "date_added": job[7],
         }
         for job in saved_jobs
     ]
@@ -1389,7 +1496,7 @@ def create_job():
     company_name = data["company_name"]
     job_description = data["job_description"]
     status = data["status"]
-    post_url = data.get("post_url")
+    post_url = data.get("post_url") or ""
     saved = data.get("saved")
     id = data.get("id")
     date_created = datetime.utcnow()
@@ -1408,6 +1515,15 @@ def create_job():
 
     if saved:
         cur.execute("UPDATE jobs SET saved = True WHERE user_id = %s AND id = %s", (user_id, id),)
+
+    cur.execute(f"SELECT * FROM resume WHERE section = %s AND user_id = %s", ("FULL RESUME",user_id,))
+    
+    resume = cur.fetchone()[3]
+
+    cur.execute(
+        "INSERT INTO resume_versions (user_id, job_id, version_text) VALUES (%s, %s, %s) RETURNING id",
+        (user_id, job_id, resume),
+    )
 
     db.commit()
 
@@ -1447,7 +1563,7 @@ def create_job():
         print(docs_text)
 
         doc_ids = [str(uuid.uuid4()) for _ in docs_chunked]
-        metadatas = [{"job_id": job_id} for _ in docs_chunked]
+        metadatas = [{"job_id": job_id, "company_name": company_name, "job_title": job_title} for _ in docs_chunked]
    
         chroma_client = chromadb.Client(Settings(
             chroma_db_impl="duckdb+parquet",
@@ -1466,10 +1582,6 @@ def create_job():
             metadatas=metadatas,
             ids=doc_ids
         )
-
-        print(chroma_collection.get(
-            where={"job_id": job_id}
-        ))
 
         return jsonify(
             success=True,
@@ -1557,142 +1669,20 @@ def get_resume_versions():
 
     cur = db.cursor()
 
-    if job_id:
-        cur.execute("SELECT * FROM resume_versions WHERE user_id = %s AND job_id = %s", (user_id, job_id,))
-    else:
-        cur.execute("SELECT * FROM resume_versions WHERE user_id = %s LIMIT %s OFFSET %s", (user_id, items_per_page, (page - 1) * items_per_page))
+ 
+    cur.execute("SELECT * FROM resume_versions WHERE user_id = %s AND job_id = %s", (user_id, job_id,))
     
-    resume_versions = cur.fetchall()
+    version = cur.fetchone()
 
-    versions = []
+    resume_version = {
+        "id": version[0],
+        "user_id": version[1],
+        "job_id": job_id,
+        "version_name": version[3],
+        "version_text": version[4]
+    }
 
-    for version in resume_versions:
-        job_id = version[2]
-        cur.execute("SELECT * FROM saved_jobs WHERE id = %s", (job_id,))
-        job = cur.fetchone()
-
-        versions.append({
-            "id": version[0],
-            "user_id": version[1],
-            "job_id": job_id,
-            "job_title": job[2],
-            "company_name": job[3],
-            "version_name": version[3],
-            "version_text": version[4]
-        })
-
-    return jsonify(versions=versions, headers=["Job Title/Role", "Company Name", "Job Description", "Status"])
-
-
-@app.route("/create-resume-version", methods=["POST"])
-def create_resume_version():
-    db = get_db()
-    data = request.json
-    user_id = data["user_id"]
-    job_id = data["job_id"]
-    version_name = data.get("version_name")
-
-    chat = ChatOpenAI(
-        model_name="gpt-3.5-turbo",
-        openai_api_key=api_key,
-        temperature=0,
-    )
-
-    print(job_id)
-
-    cur = db.cursor()
-
-    cur.execute(f"SELECT * FROM saved_jobs WHERE id = %s AND user_id = %s", (job_id, user_id,))
-
-    job = cur.fetchone()
-
-    cur.execute(f"SELECT * FROM resume WHERE section = %s AND user_id = %s", ("FULL RESUME",user_id,))
-    
-    resume = cur.fetchone()[3]
-
-    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
-
-    embeddings = embedding_functions.OpenAIEmbeddingFunction(
-        api_key=api_key,
-        model_name="text-embedding-ada-002"
-    )
-
-    chroma_client = chromadb.Client(Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory=user_embeddings_directory
-    ))
-
-    chroma_collection_jobs = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
-
-    chroma_collection_resume = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
-
-    jobs_docs = chroma_collection_jobs.query(
-        query_texts=["What are the important responsibilities, qualifications, skills, and requirements for this job?"],
-        n_results=4,
-        where={"job_id": job_id}
-    )
-
-    resume_docs = chroma_collection_resume.query(
-        query_texts=["What are the important responsibilities, qualifications, skills, and requirements outlined in this resume?"],
-        n_results=4
-    )
-
-
-    jobs_docs_texts = jobs_docs["documents"]
-    jobs_docs_texts_flat = [doc for docs in jobs_docs_texts for doc in docs]
-    jobs_docs_str = "\n\n".join(jobs_docs_texts_flat)
-
-    print(jobs_docs_str)
-
-    resume_docs_texts = resume_docs["documents"]
-    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
-    resume_docs_str = "\n\n".join(resume_docs_texts_flat)
-
-    template_questions_base = f"""Below is relevant information from a user's resume and the description of a job they are applying to. Please provide 5 recommendations to the user on how they can update their resume to increase their chances of landing an interview. Please return the recommendations separated by newlines.
-            
-    Job Description Information: {jobs_docs_str}"""
-
-    template_final = template_questions_base + """Resume Information: {context} """
-
-
-
-    chain = LLMChain(
-        llm=chat,
-        verbose=True,
-        prompt=PromptTemplate.from_template(template_final)
-    )
-
-    try:
-        recommendation_response = chain(resume_docs_str)
-        print(recommendation_response)
-        # Convert the questions string into a Python list
-        recommendation_string = recommendation_response['text']
-        recommendation_list = [re.sub(r'^\d+\.\s*', '', i) for i in recommendation_string.split('\n')]
-
-        cur.execute(
-            "INSERT INTO resume_versions (user_id, job_id, version_name, version_text) VALUES (%s, %s, %s, %s) RETURNING id",
-            (user_id, job_id, version_name, resume),
-        )
-
-        version_id = cur.fetchone()[0]
-
-        # Save the questions to the interview_questions table
-        for recommendation in recommendation_list:
-            cur.execute(
-                "INSERT INTO resume_recommendations (user_id, job_id, version_id, recommendation) VALUES (%s, %s, %s, %s)",
-                (user_id, job_id, version_id ,recommendation),
-            )
-
-        # Commit the changes to the database
-        db.commit()
-
-        return jsonify({"id": version_id, "user_id": user_id, "job_id": job_id, "version_name": version_name, "job_title": job[2], "company_name": job[3]})
-    
-    except Exception as e:
-        print(e)
-        return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
-
-
+    return jsonify(resume_version)
 
 @app.route("/edit-resume-version/<int:resume_version_id>", methods=["PUT"])
 def edit_resume_version(resume_version_id):
@@ -1786,11 +1776,11 @@ def generate_cover_letter():
     resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
     resume_docs_str = "\n\n".join(resume_docs_texts_flat)
 
-    template_questions_base = f"""Below is a user's resume and the description of a job they are applying to. Please write a cover letter for their job application.
+    template_questions_base = f"""Below is a user's resume and the description of a job they are applying to. Please write a cover letter for their job application. Do not make anything up.\n
         
-    Job Description Information: {job[4]}"""
+    Job Description Information: {job[4]} \n"""
 
-    template_final = template_questions_base + """\nResume: {context}\n """
+    template_final = template_questions_base + """Resume: {context}\n """
 
     chain = LLMChain(
         llm=chat,
@@ -1805,11 +1795,19 @@ def generate_cover_letter():
         string = response['text']
 
         cur.execute("INSERT INTO cover_letter (user_id, job_id, cover_letter) VALUES (%s, %s, %s)", (user_id, job_id , string),)
+        cover_letter_id = cur.lastrowid  # Get the ID of the inserted row
 
         # Commit the changes to the database
         db.commit()
 
-        return jsonify(cover_letter=string)
+        cover_letter_data = {
+            "id": cover_letter_id,
+            "user_id": user_id,
+            "job_id": job_id,
+            "cover_letter" : string
+        }
+
+        return jsonify(cover_letter_data)
     except Exception as e:
         print(e)
         return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
@@ -1836,17 +1834,47 @@ def get_cover_letter():
     if cover_letter is None:
         return jsonify(message="No cover letter found for the provided user_id and job_id."), 404
 
-    cover_letter_data = [
-        {
+    cover_letter_data = {
             "id": cover_letter[0],
             "user_id": cover_letter[1],
             "job_id": cover_letter[2],
             "cover_letter" : cover_letter[3]
         }
-    ]
+    
+    return jsonify(cover_letter_data)
 
-    return jsonify(cover_letter=cover_letter[3])
+@app.route("/save-cover-letter", methods=["POST"])
+def save_cover_letter():
+    db = get_db()
+    data = request.json
+    user_id = data["user_id"]
+    job_id = data.get("job_id")
+    new_cover_letter = data.get("cover_letter")
 
+    print(data)
+
+    cur = db.cursor()
+
+    # Check if cover letter already exists for the user and job
+    cur.execute("SELECT * FROM cover_letter WHERE user_id = %s AND job_id = %s", (user_id, job_id))
+    cover_letter = cur.fetchone()
+
+    if cover_letter is None:
+        # Insert new cover letter
+        cur.execute(
+            "INSERT INTO cover_letter (user_id, job_id, cover_letter) VALUES (%s, %s, %s)",
+            (user_id, job_id, new_cover_letter)
+        )
+    else:
+        # Update existing cover letter
+        cur.execute(
+            "UPDATE cover_letter SET cover_letter = %s WHERE user_id = %s AND job_id = %s",
+            (new_cover_letter, user_id, job_id)
+        )
+
+    db.commit()
+
+    return jsonify(success=True, message="Cover letter updated successfully."), 200
 
 @app.route("/delete-cover-letter", methods=["POST"])
 def delete_cover_letter():

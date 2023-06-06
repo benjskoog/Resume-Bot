@@ -1,6 +1,6 @@
 import React, { useState, useRef, useContext } from "react";
 import axios from "axios";
-import UserContext from './UserContext';
+import UserContext from './User/UserContext';
 
 const FileUploader = ({ setIsModalOpen, closeModal }) => {
   const [files, setFiles] = useState({});

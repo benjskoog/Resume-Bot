@@ -1,71 +1,73 @@
 import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
-import UserContext from './UserContext';
+import UserContext from '../User/UserContext';
 import Select from 'react-select';
 
-function CoverLetter({ jobId, resumeVersionId }) {
-    const [coverLetter, setCoverLetter] = useState(null);
+function RecommendationsForm({ jobId, resumeVersionId }) {
+    const [recommendations, setRecommendations] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedRecommendation, setSelectedRecommendation] = useState(null);
     const [loading, setLoading] = useState(false);
     const [triggerUpdate, setTriggerUpdate] = useState(false);
     const { user, setUser, logout } = useContext(UserContext);
 
     const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
-    const generateCoverLetter = async () => {
+    const generateRecomendations = async () => {
         setLoading(true);
         console.log(jobId)
         try {
-          const response = await axios.post(`${backendUrl}/generate-cover-letter`, { user_id: user.id, version_id: resumeVersionId, job_id: jobId});
+          const response = await axios.post(`${backendUrl}/generate-recommendations`, { user_id: user.id, version_id: resumeVersionId, job_id: jobId});
           console.log("Response data:", response.data);
+          const recommendationsArray = response.data.recommendations;
+          setRecommendations(prevRecommendations => [...prevRecommendations, ...recommendationsArray]);
           setTriggerUpdate(!triggerUpdate);
-          setCoverLetter(response.data.cover_letter);
         } catch (error) {
-          console.error("Error fetching cover letter:", error);
+          console.error("Error fetching interview recommendations:", error);
         } finally {
           setLoading(false);
         }
     };
       
         useEffect(() => {
-            async function fetchCoverLetter() {
+            async function fetchRecommendations() {
               setLoading(true);
               console.log(jobId)
-              console.log(resumeVersionId)
               try {
-                const response = await axios.post(`${backendUrl}/get-cover-letter`, {
+                const response = await axios.post(`${backendUrl}/get-recommendations`, {
                   user_id: user.id,
                   job_id: jobId
                 });
                 console.log("Response data:", response.data);
-                setCoverLetter(response.data.cover_letter);
+                const recommendationsArray = response.data.recommendations.map(recommendation => recommendation);
+                setRecommendations(recommendationsArray);
                 setLoading(false);
               } catch (error) {
-                console.error("Error fetching cover letter:", error);
+                console.error("Error fetching interview recommendations:", error);
                 setLoading(false);
               }
             }
           
-            fetchCoverLetter();
+            fetchRecommendations();
           }, [triggerUpdate]);
 
-
-          const deleteCoverLetter = async (coverLetter) => {
-            try {
-              const response = await axios.post(`${backendUrl}/delete-cover-letter`, {
-                user_id: user.id,
-                cover_letter_id: coverLetter.id,
-              });
-          
-              if (response.data.success) {
-                setCoverLetter();
-              } else {
-                console.error('Error deleting the cover letter:', response.data.message);
-              }
-            } catch (error) {
-              console.error('Error deleting the cover letter:', error);
-            }
-          };
+  const deleteRecommendation = async (recommendation) => {
+    try {
+      const response = await axios.post(`${backendUrl}/delete-recommendation`, {
+        user_id: user.id,
+        recommendation_id: recommendation.id,
+      });
+  
+      if (response.data.success) {
+        const newRecommendations = recommendations.filter((q) => q.id !== recommendation.id);
+        setRecommendations(newRecommendations);
+      } else {
+        console.error('Error deleting the recommendation:', response.data.message);
+      }
+    } catch (error) {
+      console.error('Error deleting the recommendation:', error);
+    }
+  };
   
   
   return (
@@ -78,22 +80,35 @@ function CoverLetter({ jobId, resumeVersionId }) {
     <div className="bg-white p-4 max-w-full flex flex-col items-center">
       <div className="flex max-w-6xl mt-2 w-full">
       <button
-        onClick={generateCoverLetter}
+        onClick={generateRecomendations}
         type="button"
         className="mb-4 flex-shrink-0 inline-block rounded bg-blue-500 px-8 pb-2.5 pt-2.5 text-xs font-medium uppercase leading-normal text-white shadow-[0_4px_9px_-4px_#3b71ca] transition duration-150 ease-in-out hover:bg-primary-600 hover:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] focus:bg-primary-600 focus:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] focus:outline-none focus:ring-0 active:bg-primary-700 active:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.3),0_4px_18px_0_rgba(59,113,202,0.2)] dark:shadow-[0_4px_9px_-4px_rgba(59,113,202,0.5)] dark:hover:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)] dark:focus:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)] dark:active:shadow-[0_8px_9px_-4px_rgba(59,113,202,0.2),0_4px_18px_0_rgba(59,113,202,0.1)]"
         data-te-ripple-init
         data-te-ripple-color="light">
-        Generate Cover Letter
+        Generate Recommendations
       </button>
       </div>
-      {coverLetter &&
-      <div className="max-w-7xl flex flex-col max-w-6xl mt-2 w-full">
+      <div className="flex flex-col max-w-6xl mt-2 w-full">
+          <ul className="max-w-7xl">
+        {recommendations.map((recommendation, index) => (
+          <li key={index} className="mb-2">
             <div className="block rounded-lg bg-white p-6 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] dark:bg-neutral-700">
-                <p className="mb-2 text-base text-neutral-600 dark:text-neutral-200 whitespace-pre-wrap">
-                  {coverLetter}
+                <h5 className="mb-4 text-xl font-medium leading-tight text-neutral-800 dark:text-neutral-50">
+                    {recommendation.recommendation}
+                </h5>
+            {recommendation.answer ? (
+                <>
+                <p className="mb-2 text-base font-medium text-neutral-600 dark:text-neutral-200">
+                    Answer:
                 </p>
+                <p className="mb-2 text-base text-neutral-600 dark:text-neutral-200">
+                  {recommendation.answer}
+                </p>
+
+                </>
+              ) : ""}
                 <button
-                    onClick={() => deleteCoverLetter(coverLetter)}
+                    onClick={() => deleteRecommendation(recommendation)}
                     className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-1 rounded"
                     >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
@@ -101,11 +116,13 @@ function CoverLetter({ jobId, resumeVersionId }) {
                     </svg>
                 </button>
             </div>
+          </li>
+        ))}
+      </ul>
       </div>
-    }
     </div>
     </div>
   );
 }
 
-export default CoverLetter;
+export default RecommendationsForm;

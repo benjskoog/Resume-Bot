@@ -1,8 +1,8 @@
 import React, { useState, useContext } from 'react';
-import FileUploader from "./FileUploader";
+import FileUploader from "../FileUploader";
 import UserContext from './UserContext';
 
-function NewUserWalkthrough() {
+function NewUserWalkthrough( {closeWalkthrough} ) {
   const [isUploaderOpen, setIsUploaderOpen] = useState(false);
   const { user } = useContext(UserContext);
   const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:3001";
@@ -15,6 +15,7 @@ function NewUserWalkthrough() {
   const closeModal = (e) => {
     if (e.target === e.currentTarget) {
       setIsUploaderOpen(false);
+      closeWalkthrough();
     }
   };
 

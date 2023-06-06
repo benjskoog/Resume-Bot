@@ -1,8 +1,8 @@
 import React, { useState, useContext } from 'react';
 import axios from 'axios';
-import UserContext from './UserContext';
+import UserContext from '../User/UserContext';
 import { Navigate } from 'react-router-dom';
-import NavBarLogo from './NavBarLogo';
+import NavBarLogo from '../NavBar/NavBarLogo';
 
 function Login() {
   const [email, setEmail] = useState('');

@@ -1,9 +1,18 @@
-import React, { useContext } from "react";
-import UserContext from './UserContext';
+import React, { useContext, useEffect, useRef } from "react";
+import UserContext from '../User/UserContext';
 
 const Messages = ({ messages, fetchingResponse }) => {
 
   const { user, loading } = useContext(UserContext);
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   return (
     <div className="messages-container flex-grow">
@@ -46,7 +55,6 @@ const Messages = ({ messages, fetchingResponse }) => {
               </div>
             )}
                       <p className="flex items-center justify-center">{message.message}</p>
-
             </div>
           </div>
         ))}
@@ -59,6 +67,7 @@ const Messages = ({ messages, fetchingResponse }) => {
         </div>
       </div>
       )}
+      <div ref={messagesEndRef} />
     </div>
   );
 };

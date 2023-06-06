@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from "react";
-import UserContext from './UserContext';
+import UserContext from './User/UserContext';
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import TopBar from './TopBar';

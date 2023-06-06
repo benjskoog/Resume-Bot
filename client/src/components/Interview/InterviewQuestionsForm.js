@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import QuestionModal from './QuestionModal';
-import UserContext from './UserContext';
+import UserContext from '../User/UserContext';
 import Select from 'react-select';
 
 function InterviewQuestionsForm({ job, jobId }) {

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useContext } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import FileUploader from "./FileUploader";
-import UserContext from './UserContext';
+import UserContext from './User/UserContext';
 
 function DataSources({ onBack }) {
   const [tables, setTables] = useState([]);
@@ -33,7 +33,7 @@ function DataSources({ onBack }) {
   let allowedTableNames = [];
 
   if (user.email === "benjskoog@gmail.com") {
-    allowedTableNames = ["chat", "messages", "resume", "users", "interview_questions", "jobs", "cover_letter", "saved_jobs", "resume_versions"];
+    allowedTableNames = ["chat", "messages", "resume", "users", "interview_questions", "jobs", "cover_letter", "saved_jobs", "resume_versions", "resume_recommendations"];
   } else {
     allowedTableNames = ["chat", "messages", "resume"];
   }

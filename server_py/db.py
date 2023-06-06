@@ -132,22 +132,11 @@ def setup_db():
             id SERIAL PRIMARY KEY,
             user_id INTEGER,
             token TEXT,
-            expires_at TEXT, 
+            expires_at TIMESTAMP WITH TIME ZONE, 
             FOREIGN KEY (user_id) REFERENCES users (id)
         );
         """
     )
-    
-    cursor.execute(
-        """
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name='resume' AND column_name='section';
-        """
-    )
-    column_exists = cursor.fetchone()
-    if not column_exists:
-        cursor.execute("ALTER TABLE resume ADD COLUMN section TEXT;")
     
     conn.commit()
     cursor.close()
@@ -161,7 +150,10 @@ def get_table_data(table_name, user_id):
     if user_id == "1":
         cursor.execute(f"SELECT * FROM {table_name}")
     else:
-        cursor.execute(f"SELECT * FROM {table_name} WHERE id = %s", (user_id,))
+        if table_name == "users":
+            cursor.execute(f"SELECT * FROM {table_name} WHERE id = %s", (user_id,))
+        else:
+            cursor.execute(f"SELECT * FROM {table_name} WHERE user_id = %s", (user_id,))
     
     result = cursor.fetchall()
     columns = [desc[0] for desc in cursor.description]  # get column names
@@ -176,7 +168,7 @@ def delete_row(table_name, row_id, user_id=None):
     cursor = conn.cursor()
 
     if table_name == "chat":
-        cursor.execute("SELECT chat_id FROM chat WHERE id = %s AND user_id = %s", (row_id, user_id))
+        cursor.execute("SELECT id FROM chat WHERE id = %s AND user_id = %s", (row_id, user_id))
         chat_id = cursor.fetchone()
         if chat_id:
             cursor.execute("DELETE FROM messages WHERE chat_id = %s", (chat_id[0],))

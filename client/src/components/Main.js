@@ -1,23 +1,23 @@
 import React, { useState, useEffect, useContext, useImperativeHandle, useRef } from "react";
 import { BrowserRouter as Router, Route, Routes, useLocation, Link, Navigate } from 'react-router-dom';
-import UserContext from './UserContext';
-import BottomInput from './BottomInput';
+import UserContext from './User/UserContext';
+import BottomInput from './Chat/BottomInput';
 import DataSources from './DataSources';
-import InterviewQuestionsForm from './InterviewQuestionsForm';
+import InterviewQuestionsForm from './Interview/InterviewQuestionsForm';
 import TableView from './TableView';
-import Chat from './Chat';
-import NavBar from './NavBar';
-import Register from './Register';
-import Login from './Login';
+import Chat from './Chat/Chat';
+import NavBar from './NavBar/NavBar';
+import Register from './Login/Register';
+import Login from './Login/Login';
 import TopBar from './TopBar';
-import UserSettings from './UserSettings';
-import ForgotPassword from './ForgotPassword';
-import ResetPassword from "./ResetPassword";
-import SavedJobs from "./SavedJobs";
+import UserSettings from './User/UserSettings';
+import ForgotPassword from './Login/ForgotPassword';
+import ResetPassword from "./Login/ResetPassword";
+import SavedJobs from "./Jobs/SavedJobs";
 import axios from "axios";
-import NewJobForm from "./NewJobForm";
-import ResumeOptimizer from "./ResumeOptimizer";
-import Jobs from "./Jobs";
+import NewJobForm from "./Jobs/NewJobForm";
+import ResumeOptimizer from "./ResumeOptimizer/ResumeOptimizer";
+import Jobs from "./Jobs/Jobs";
 
 const Main = React.forwardRef((props, ref) => {
   const location = useLocation();

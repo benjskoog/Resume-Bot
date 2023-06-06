@@ -1,8 +1,8 @@
 import React, { useContext, useRef } from 'react';
 import { BrowserRouter as Router, Route, Routes, useLocation, Link } from 'react-router-dom';
-import UserContext from './UserContext';
+import UserContext from '../User/UserContext';
 import NavBarItem from './NavBarItem';
-import TopBar from './TopBar';
+import TopBar from '../TopBar';
 import NavBarLogo from './NavBarLogo';
 
 const NavBar = ({ selectedItem, onNewChatClick }) => {
@@ -44,39 +44,12 @@ const NavBar = ({ selectedItem, onNewChatClick }) => {
     </svg>
       <p className="text-base leading-4 ">Interview Questions</p>
     </Link>
-  </div>
-  <div class="flex flex-col justify-start items-center px-6 border-b border-gray-600 w-full">
-  <button onClick={showMenu1} class="focus:outline-none focus:text-indigo-400 text-left  text-white flex justify-between items-center w-full py-5 space-x-14">
-    <p class="text-sm leading-5  uppercase">Resume</p>
-      <svg id="icon1" ref={icon1} class="transform" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M18 15L12 9L6 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-    </button>
-    <div ref={menu1} class="flex justify-start  flex-col w-full md:w-auto items-start pb-1 ">
-      <Link to="/resume-optimizer" className={`flex justify-start items-center space-x-6 w-full ${selectedItem === "/resume-optimizer" ? "outline-none text-indigo-400" : "text-white"} rounded px-3 py-2  w-full md:w-52`}>
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 8.00002C15.1046 8.00002 16 7.10459 16 6.00002C16 4.89545 15.1046 4.00002 14 4.00002C12.8954 4.00002 12 4.89545 12 6.00002C12 7.10459 12.8954 8.00002 14 8.00002Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M4 6H12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M16 6H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M8 14C9.10457 14 10 13.1046 10 12C10 10.8954 9.10457 10 8 10C6.89543 10 6 10.8954 6 12C6 13.1046 6.89543 14 8 14Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M4 12H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M10 12H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M17 20C18.1046 20 19 19.1046 19 18C19 16.8955 18.1046 16 17 16C15.8954 16 15 16.8955 15 18C15 19.1046 15.8954 20 17 20Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M4 18H15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M19 18H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        <p className="text-base leading-4 ">Resume Optimizer</p>
-      </Link>
-      <Link to="/datasources" className={`flex justify-start items-center space-x-6 w-full ${selectedItem === "/datasources" ? "outline-none text-indigo-400" : "text-white"} rounded px-3 py-2  w-full md:w-52`}>
-      <svg className="fill-stroke " width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M9 4H5C4.44772 4 4 4.44772 4 5V9C4 9.55228 4.44772 10 5 10H9C9.55228 10 10 9.55228 10 9V5C10 4.44772 9.55228 4 9 4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          <path d="M19 4H15C14.4477 4 14 4.44772 14 5V9C14 9.55228 14.4477 10 15 10H19C19.5523 10 20 9.55228 20 9V5C20 4.44772 19.5523 4 19 4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          <path d="M9 14H5C4.44772 14 4 14.4477 4 15V19C4 19.5523 4.44772 20 5 20H9C9.55228 20 10 19.5523 10 19V15C10 14.4477 9.55228 14 9 14Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          <path d="M19 14H15C14.4477 14 14 14.4477 14 15V19C14 19.5523 14.4477 20 15 20H19C19.5523 20 20 19.5523 20 19V15C20 14.4477 19.5523 14 19 14Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    <Link to="/saved-jobs" className={`flex justify-start items-center space-x-6 w-full ${selectedItem === "/saved-jobs" ? "outline-none text-indigo-400" : "text-white"} rounded`}>
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
         </svg>
-        <p className="text-base leading-4 ">Upload Resume</p>
-      </Link>
-    </div>
+      <p className="text-base leading-4 ">Job Applications</p>
+    </Link>
   </div>
   <div class="flex flex-col justify-start items-center px-6 border-b border-gray-600 w-full">
   <button onClick={showMenu2} class="focus:outline-none focus:text-indigo-400 text-left  text-white flex justify-between items-center w-full py-5 space-x-14">
@@ -92,11 +65,24 @@ const NavBar = ({ selectedItem, onNewChatClick }) => {
       </svg>
         <p className="text-base leading-4 ">Job Search</p>
       </Link>
-      <Link to="/saved-jobs" className={`flex justify-start items-center space-x-6 w-full ${selectedItem === "/saved-jobs" ? "outline-none text-indigo-400" : "text-white"} rounded px-3 py-2  w-full md:w-52`}>
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+    </div>
+  </div>
+  <div class="flex flex-col justify-start items-center px-6 border-b border-gray-600 w-full">
+  <button onClick={showMenu1} class="focus:outline-none focus:text-indigo-400 text-left  text-white flex justify-between items-center w-full py-5 space-x-14">
+    <p class="text-sm leading-5  uppercase">Data</p>
+      <svg id="icon1" ref={icon1} class="transform" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M18 15L12 9L6 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </button>
+    <div ref={menu1} class="flex justify-start  flex-col w-full md:w-auto items-start pb-1 ">
+      <Link to="/datasources" className={`flex justify-start items-center space-x-6 w-full ${selectedItem === "/datasources" ? "outline-none text-indigo-400" : "text-white"} rounded px-3 py-2  w-full md:w-52`}>
+      <svg className="fill-stroke " width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 4H5C4.44772 4 4 4.44772 4 5V9C4 9.55228 4.44772 10 5 10H9C9.55228 10 10 9.55228 10 9V5C10 4.44772 9.55228 4 9 4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M19 4H15C14.4477 4 14 4.44772 14 5V9C14 9.55228 14.4477 10 15 10H19C19.5523 10 20 9.55228 20 9V5C20 4.44772 19.5523 4 19 4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M9 14H5C4.44772 14 4 14.4477 4 15V19C4 19.5523 4.44772 20 5 20H9C9.55228 20 10 19.5523 10 19V15C10 14.4477 9.55228 14 9 14Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M19 14H15C14.4477 14 14 14.4477 14 15V19C14 19.5523 14.4477 20 15 20H19C19.5523 20 20 19.5523 20 19V15C20 14.4477 19.5523 14 19 14Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        <p className="text-base leading-4 ">Saved Jobs</p>
+        <p className="text-base leading-4 ">My Data</p>
       </Link>
     </div>
   </div>

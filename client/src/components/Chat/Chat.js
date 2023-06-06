@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useContext, useImperativeHandle } from "react";
 import Messages from './Messages';
-import TopBar from './TopBar';
+import TopBar from '../TopBar';
 import { BrowserRouter as Router, Route, Routes, useLocation, Link, useParams } from 'react-router-dom';
 import BottomInput from './BottomInput';
 import ChatHistory from './ChatHistory';
-import UserContext from './UserContext';
+import UserContext from '../User/UserContext';
 import axios from "axios";
-import NewUserWalkthrough from './NewUserWalkthrough';
+import NewUserWalkthrough from '../User/NewUserWalkthrough';
 
 const Chat = React.forwardRef((props, ref) => {
   const [messages, setMessages] = useState([]);
@@ -22,6 +22,10 @@ const Chat = React.forwardRef((props, ref) => {
   const clearChatState = () => {
     setMessages([]);
     setFetchingResponse(false);
+  };
+
+  const closeWalkthrough = () => {
+    setIsNewUser(false);
   };
 
   useImperativeHandle(ref, () => ({
@@ -117,7 +121,7 @@ const Chat = React.forwardRef((props, ref) => {
           onClick={() => setIsNewUser(false)}
         >
           <div className="bg-white rounded shadow-lg relative w-1/2">
-            <NewUserWalkthrough />
+            <NewUserWalkthrough closeWalkthrough={closeWalkthrough} />
           </div>
         </div>
       )}

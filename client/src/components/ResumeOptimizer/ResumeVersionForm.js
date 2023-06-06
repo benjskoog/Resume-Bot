@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
-import UserContext from './UserContext';
+import UserContext from '../User/UserContext';
 import Select from 'react-select';
 import RecommendationsForm from './RecommendationsForm';
 

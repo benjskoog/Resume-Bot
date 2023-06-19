@@ -1,10 +1,9 @@
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 import os
-import asyncpg
+import pinecone
 from asyncpg.exceptions import UniqueViolationError
 import psycopg2
-import asyncio
 import json
 import secrets
 from dotenv import load_dotenv
@@ -53,17 +52,19 @@ from docx.oxml import parse_xml
 app = Flask(__name__)
 CORS(app)
 
-DATABASE = "data.db"
-DB_URL = os.environ.get("DB_URL")
+load_dotenv()
 
 chains = {}
 
-load_dotenv()
+DATABASE = "data.db"
+DB_URL = os.environ.get("DB_URL")
 
-api_key = os.environ.get("OPENAI_API_KEY")
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+pinecone_api_key = os.environ.get("PINECONE_API_KEY")
 app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY")
 
-print(os.environ.get("JWT_SECRET_KEY"))
+pinecone.init(api_key=pinecone_api_key, environment="us-west4-gcp")
+index = pinecone.Index("resume-bot")
 
 jwt = JWTManager(app)
 
@@ -159,25 +160,6 @@ def register():
     db.commit()
     cursor.execute("SELECT * FROM users WHERE email=%s", (data["email"],))
     user = cursor.fetchone()
-
-    user_embeddings_directory = os.path.join(persist_directory, f"user_{user[0]}_embeddings")
-    os.makedirs(user_embeddings_directory, exist_ok=True)
-
-    chroma_client = chromadb.Client(Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory=user_embeddings_directory
-    ))
-
-    embeddings = embedding_functions.OpenAIEmbeddingFunction(
-        api_key=api_key,
-        model_name="text-embedding-ada-002"
-    )
-
-    chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
-
-    chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
-
-    chroma_client.get_or_create_collection(name="questions", embedding_function=embeddings)
 
     return jsonify({"id": user[0], "email": user[5], "first_name": user[1], "last_name": user[2], "job_title": user[3], "location": user[4]}), 201
 
@@ -454,10 +436,11 @@ def upload_resume():
         print(plain_text)
         resume_sections = split_resume_into_sections(plain_text)
 
-        embeddings = embedding_functions.OpenAIEmbeddingFunction(
-                api_key=api_key,
-                model_name="text-embedding-ada-002"
+        embeddings = OpenAIEmbeddings(
+                openai_api_key=openai_api_key,
+                model="text-embedding-ada-002"
         )
+
         text_splitter = RecursiveCharacterTextSplitter(
             # Set a really small chunk size, just to show.
             chunk_size = 500,
@@ -466,27 +449,19 @@ def upload_resume():
         )
         docs_chunked = text_splitter.create_documents([plain_text])
         docs_text = [doc.page_content for doc in docs_chunked]
-        print(docs_text)
+        docs_embed = embeddings.embed_documents(docs_text)
 
         doc_ids = [str(uuid.uuid4()) for _ in docs_chunked]
-        metadatas = [{"type": "resume"} for _ in docs_chunked]
+        metadatas = [{"type": "resume", "user": user_id, "text": _.page_content} for _ in docs_chunked]
 
-        chroma_client = chromadb.Client(Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory=user_embeddings_directory
-        ))
-
-        chroma_collection = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
-
-        chroma_collection.delete(
-            where={"type": "resume"}
+        index.delete(
+            filter={
+                "type": {"$eq": "resume"},
+                "user": user_id
+            }
         )
 
-        chroma_collection.add(
-            documents=docs_text,
-            metadatas=metadatas,
-            ids=doc_ids
-        )
+        index.upsert(vectors=zip(doc_ids, docs_embed, metadatas))
 
         save_resume_to_database(user_id, resume_sections)
 
@@ -526,35 +501,37 @@ def gpt_api_call():
     user_id = form_values["id"]
     first_name = form_values["first_name"]
     print(user_id)
-    print(api_key)
 
-    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
-
-    embeddings = embedding_functions.OpenAIEmbeddingFunction(
-        api_key=api_key,
-        model_name="text-embedding-ada-002"
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=openai_api_key,
+        model="text-embedding-ada-002"
     )
 
-    chroma_client = chromadb.Client(Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory=user_embeddings_directory
-    ))
+    query_embed = embeddings.embed_query(query)
+    print(query_embed)
 
     try:
         
-        chroma_collection_resume = chroma_client.get_collection(name="resume", embedding_function=embeddings)
-
-        resume_docs = chroma_collection_resume.query(
-            query_texts=[query],
-            n_results=2,
-
+        resume_docs = index.query(
+            vector=query_embed,
+            filter={
+                "type": {"$eq": "resume"},
+                "user": f"""{user_id}"""
+            },
+            top_k=2,
+            include_metadata=True,
+            namespace=""
         )
 
-        resume_docs_texts = resume_docs["documents"]
+        print(resume_docs)
 
-        resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
+        resume_docs_texts = resume_docs["matches"]
+
+        resume_docs_texts_flat = [doc["metadata"]["text"] for doc in resume_docs_texts]
 
         resume_docs_str = "\n\n".join(resume_docs_texts_flat)
+
+        print(resume_docs_str)
 
     except:
 
@@ -562,17 +539,19 @@ def gpt_api_call():
 
     try:
         
-        chroma_collection_jobs = chroma_client.get_collection(name="jobs", embedding_function=embeddings)
-
-        jobs_docs = chroma_collection_jobs.query(
-            query_texts=[query],
-            n_results=4,
-
+        jobs_docs = index.query(
+            vector=query_embed,
+            filter={
+                "type": {"$eq": "jobs"},
+                "user": f"""{user_id}"""
+            },
+            top_k=4,
+            include_metadata=True
         )
 
-        jobs_docs_texts = jobs_docs["documents"]
+        jobs_docs_texts = jobs_docs["matches"]
 
-        jobs_docs_texts_flat = [doc for docs in jobs_docs_texts for doc in docs]
+        jobs_docs_texts_flat = [doc["metadata"]["text"] for doc in jobs_docs_texts]
 
         jobs_docs_str = "\n\n".join(jobs_docs_texts_flat)
 
@@ -584,21 +563,18 @@ def gpt_api_call():
 
     try:
 
-        chroma_collection_questions = chroma_client.get_collection(name="questions", embedding_function=embeddings)
-
-        if chroma_collection_questions.count() < 2:
-            q_num = chroma_collection_questions.count()
-        else:
-            q_num = 2
-
-        questions_docs = chroma_collection_questions.query(
-            query_texts=[query],
-            n_results=q_num,
-
+        questions_docs = index.query(
+            vector=query_embed,
+            filter={
+                "type": {"$eq": "questions"},
+                "user": f"""{user_id}"""
+            },
+            top_k=1,
+            include_metadata=True
         )
 
-        questions_docs_texts = questions_docs["documents"]
-        questions_docs_texts_flat = [doc for docs in questions_docs_texts for doc in docs]
+        questions_docs_texts = questions_docs["matches"]
+        questions_docs_texts_flat = [doc["metadata"]["text"] for doc in questions_docs_texts]
         questions_docs_str = "\n\n".join(questions_docs_texts_flat)
 
         context = context + f"""\nInterview questions that have been answered by {first_name}:\n {questions_docs_str}"""
@@ -609,7 +585,7 @@ def gpt_api_call():
 
     chat = ChatOpenAI(
         model_name="gpt-3.5-turbo",
-        openai_api_key=api_key,
+        openai_api_key=openai_api_key,
         temperature=0,
     )
 
@@ -681,49 +657,51 @@ def get_answer_help():
     job_id = form_values.get("job_id")
     print(user_id)
 
-    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
-
-    embeddings = embedding_functions.OpenAIEmbeddingFunction(
-        api_key=api_key,
-        model_name="text-embedding-ada-002"
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=openai_api_key,
+        model="text-embedding-ada-002"
     )
 
-    chroma_client = chromadb.Client(Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory=user_embeddings_directory
-    ))
+    query_embed = embeddings.embed_query(query)
 
-
-    chroma_collection_jobs = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
-
-    chroma_collection_resume = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
-
-    chroma_collection_questions = chroma_client.get_or_create_collection(name="questions", embedding_function=embeddings)
-
-    resume_docs = chroma_collection_resume.query(
-        query_texts=[query],
-        n_results=2
+    resume_docs = index.query(
+        vector=query_embed,
+        filter={
+            "type": {"$eq": "resume"},
+            "user": f"""{user_id}"""
+        },
+        top_k=2,
+        include_metadata=True,
+        namespace=""
     )
 
-    resume_docs_texts = resume_docs["documents"]
-    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
+    resume_docs_texts = resume_docs["matches"]
+
+    resume_docs_texts_flat = [doc["metadata"]["text"] for doc in resume_docs_texts]
+
     resume_docs_str = "\n\n".join(resume_docs_texts_flat)
 
     try:
-        questions_docs = chroma_collection_questions.query(
-            query_texts=[query],
-            n_results=2
+        questions_docs = index.query(
+            vector=query_embed,
+            filter={
+                "type": {"$eq": "questions"},
+                "user": f"""{user_id}"""
+            },
+            top_k=2,
+            include_metadata=True,
+            namespace=""
         )
         
-        questions_docs_texts = questions_docs["documents"]
-        questions_docs_texts_flat = [doc for docs in questions_docs_texts for doc in docs]
+        questions_docs_texts = questions_docs["matches"]
+        questions_docs_texts_flat = [doc["metadata"]["text"] for doc in questions_docs_texts]
         questions_docs_str = "\n\n".join(questions_docs_texts_flat)
     except:
         questions_docs_str = ""
 
     chat = ChatOpenAI(
         model_name="gpt-3.5-turbo",
-        openai_api_key=api_key,
+        openai_api_key=openai_api_key,
         temperature=0,
     )
 
@@ -742,14 +720,19 @@ def get_answer_help():
 
     if job_id:
 
-        job_docs = chroma_collection_jobs.query(
-            query_texts=[query],
-            n_results=2,
-            where={"job_id": job_id}  # directly convert job_id to string
+        job_docs = index.query(
+            vector=query_embed,
+            filter={
+                "type": {"$eq": "jobs"},
+                "user": f"""{user_id}"""
+            },
+            top_k=2,
+            include_metadata=True,
+            namespace=""
         )
 
-        job_docs_texts = job_docs["documents"]
-        job_docs_texts_flat = [doc for docs in job_docs_texts for doc in docs]
+        job_docs_texts = job_docs["matches"]
+        job_docs_texts_flat = [doc["metadata"]["text"] for doc in job_docs_texts]
         job_docs_str = "\n\n".join(job_docs_texts_flat)
 
         template_help = template_base + f"""\n\nInformation from the job post the user is applying to:\n {job_docs_str}""" + f"""\n\nInformation from the user's resume:\n {resume_docs_str}"""
@@ -800,46 +783,49 @@ def improve_answer():
     job_id = form_values.get("job_id")
     print(user_id)
 
-    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
-
-    embeddings = embedding_functions.OpenAIEmbeddingFunction(
-        api_key=api_key,
-        model_name="text-embedding-ada-002"
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=openai_api_key,
+        model="text-embedding-ada-002"
     )
 
-    chroma_client = chromadb.Client(Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory=user_embeddings_directory
-    ))
+    query_embed = embeddings.embed_query(query)
 
-    chroma_collection_jobs = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
-
-    chroma_collection_resume = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
-
-    resume_docs = chroma_collection_resume.query(
-        query_texts=[query],
-        n_results=2
+    resume_docs = index.query(
+        vector=query_embed,
+        filter={
+            "type": {"$eq": "resume"},
+            "user": f"""{user_id}"""
+        },
+        top_k=2,
+        include_metadata=True,
+        namespace=""
     )
 
-    resume_docs_texts = resume_docs["documents"]
-    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
+    resume_docs_texts = resume_docs["matches"]
+
+    resume_docs_texts_flat = [doc["metadata"]["text"] for doc in resume_docs_texts]
+
     resume_docs_str = "\n\n".join(resume_docs_texts_flat)
 
-    jobs_docs = chroma_collection_jobs.query(
-        query_texts=["job or role description"],
-        n_results=2,
-        where={"job_id": job_id}
+    job_docs = index.query(
+        vector=query_embed,
+        filter={
+            "type": {"$eq": "jobs"},
+            "job_id": str(job_id),
+            "user": f"""{user_id}"""
+        },
+        top_k=2,
+        include_metadata=True,
+        namespace=""
     )
 
-    jobs_docs_texts = jobs_docs["documents"]
-    jobs_docs_texts_flat = [doc for docs in jobs_docs_texts for doc in docs]
-    jobs_docs_str = "\n\n".join(jobs_docs_texts_flat)
-
-
+    job_docs_texts = job_docs["matches"]
+    job_docs_texts_flat = [doc["metadata"]["text"] for doc in job_docs_texts]
+    job_docs_str = "\n\n".join(job_docs_texts_flat)
 
     chat = ChatOpenAI(
         model_name="gpt-3.5-turbo",
-        openai_api_key=api_key,
+        openai_api_key=openai_api_key,
         temperature=0,
     )
 
@@ -851,7 +837,7 @@ def improve_answer():
 
         Your response must be in JSON with the following properties: "answer": "" , "recommendation": "". Relevant information is provided below. Do not make anything up.\n""" + f"""Interview question user is answering: {query}\n"""
 
-    template_final = template_base + """\nUser's interview question answer: {context}""" + f"""\nInformation from the users resume:\n {resume_docs_str}""" + f"""\nInformation from the job application:\n {jobs_docs_str}"""
+    template_final = template_base + """\nUser's interview question answer: {context}""" + f"""\nInformation from the users resume:\n {resume_docs_str}""" + f"""\nInformation from the job application:\n {job_docs_str}"""
 
     chain = LLMChain(
         llm=chat,
@@ -872,8 +858,6 @@ def improve_answer():
         print(e)
         return jsonify(success=False, message="Error fetching GPT-3.5 API"), 500
 
-
-
 @app.route("/generate-interview-questions", methods=["POST"])
 def generate_interview_questions():
     form_values = request.json
@@ -884,7 +868,7 @@ def generate_interview_questions():
 
     chat = ChatOpenAI(
         model_name="gpt-3.5-turbo",
-        openai_api_key=api_key,
+        openai_api_key=openai_api_key,
         temperature=0,
     )
 
@@ -899,34 +883,38 @@ def generate_interview_questions():
 
     if question_type == 'WorkExperience':
         type_string = "that are specifically relevant to their work experience"
+        query = "Work Experience"
     
-    if question_type =="RoleBased":
+    if question_type == "RoleBased":
         type_string = "that are specifically relevant to the job"
+        query = "Work Experience"
 
-    if question_type =="Technical":
+    if question_type == "Technical":
         type_string = "that are specifically relevant to their technical capabilities"
+        query = "Technical Skills"
 
-    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
-
-    embeddings = embedding_functions.OpenAIEmbeddingFunction(
-        api_key=api_key,
-        model_name="text-embedding-ada-002"
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=openai_api_key,
+        model="text-embedding-ada-002"
     )
 
-    chroma_client = chromadb.Client(Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory=user_embeddings_directory
-    ))
+    query_embed = embeddings.embed_query(query)
 
-    chroma_collection_resume = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
-
-    resume_docs = chroma_collection_resume.query(
-        query_texts=[type_string],
-        n_results=4
+    resume_docs = index.query(
+        vector=query_embed,
+        filter={
+            "type": {"$eq": "resume"},
+            "user": f"""{user_id}"""
+        },
+        top_k=2,
+        include_metadata=True,
+        namespace=""
     )
 
-    resume_docs_texts = resume_docs["documents"]
-    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
+    resume_docs_texts = resume_docs["matches"]
+
+    resume_docs_texts_flat = [doc["metadata"]["text"] for doc in resume_docs_texts]
+
     resume_docs_str = "\n\n".join(resume_docs_texts_flat)
  
     if job_id:
@@ -956,7 +944,6 @@ def generate_interview_questions():
         exclude_similar = ""
 
     template_final = template_questions_base + """Information from the user's Resume:\n {context} \n""" + exclude_similar
-
 
     chain = LLMChain(
         llm=chat,
@@ -1034,20 +1021,10 @@ def delete_interview_question():
     os.makedirs(user_embeddings_directory, exist_ok=True)
 
     try:
-        embeddings = embedding_functions.OpenAIEmbeddingFunction(
-            api_key=api_key,
-            model_name="text-embedding-ada-002"
-        )
 
-        chroma_client = chromadb.Client(Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory=user_embeddings_directory
-        ))
-
-        chroma_collection = chroma_client.get_or_create_collection(name="questions", embedding_function=embeddings)
-
-        chroma_collection.delete(
-            ids=[str(question_id)]
+        index.delete(
+            ids=[str(question_id)],
+            namespace=""
         )
 
         cur.execute("DELETE FROM interview_questions WHERE id = %s AND user_id = %s", (question_id, user_id))
@@ -1071,9 +1048,6 @@ def save_answer():
     question = data["question"]
     answer = data["answer"]
 
-    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
-    os.makedirs(user_embeddings_directory, exist_ok=True)
-
     try:
         cur.execute(
             "UPDATE interview_questions SET answer = %s WHERE id = %s",
@@ -1082,15 +1056,10 @@ def save_answer():
         db.commit()
         cur.close()
 
-        embeddings = embedding_functions.OpenAIEmbeddingFunction(
-            api_key=api_key,
-            model_name="text-embedding-ada-002"
+        embeddings = OpenAIEmbeddings(
+            openai_api_key=openai_api_key,
+            model="text-embedding-ada-002"
         )
-
-        chroma_client = chromadb.Client(Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory=user_embeddings_directory
-        ))
 
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size = 5000,
@@ -1099,28 +1068,14 @@ def save_answer():
         )
         docs_chunked = text_splitter.create_documents([f"Question: {question}, Answer: {answer}"])
         docs_text = [doc.page_content for doc in docs_chunked]
+        docs_embed = embeddings.embed_documents(docs_text)
         doc_ids = [f"{question_id}"]
 
-        metadatas = [{"type": "question_answers"} for _ in docs_chunked]
-
-        chroma_client = chromadb.Client(Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory=user_embeddings_directory
-        ))
-
-        try:
-            chroma_collection = chroma_client.get_or_create_collection(name="questions", embedding_function=embeddings)
-
-        except:
-            chroma_collection = chroma_client.create_collection(name="questions", embedding_function=embeddings)
+        metadatas = [{"type": "questions", "user": str(user_id), "text": _.page_content} for _ in docs_chunked]
         
         if answer.strip():
 
-            chroma_collection.add(
-                documents=docs_text,
-                metadatas=metadatas,
-                ids=doc_ids
-            )
+            index.upsert(vectors=zip(doc_ids, docs_embed, metadatas))
 
         return jsonify(success=True)
     except Exception as e:
@@ -1138,9 +1093,6 @@ def edit_answer():
     question = data["question"]
     answer = data["answer"]
 
-    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
-    os.makedirs(user_embeddings_directory, exist_ok=True)
-
     try:
         cur.execute(
             "UPDATE interview_questions SET answer = %s WHERE id = %s",
@@ -1149,9 +1101,9 @@ def edit_answer():
         db.commit()
         cur.close()
 
-        embeddings = embedding_functions.OpenAIEmbeddingFunction(
-            api_key=api_key,
-            model_name="text-embedding-ada-002"
+        embeddings = OpenAIEmbeddings(
+            openai_api_key=openai_api_key,
+            model="text-embedding-ada-002"
         )
         
         text_splitter = RecursiveCharacterTextSplitter(
@@ -1161,29 +1113,15 @@ def edit_answer():
         )
         docs_chunked = text_splitter.create_documents([f"Question: {question}, Answer: {answer}"])
         docs_text = [doc.page_content for doc in docs_chunked]
-
-        doc_ids = [f"{question_id}"]
-
-        chroma_client = chromadb.Client(Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory=user_embeddings_directory
-        ))
-
-        try:
-            chroma_collection = chroma_client.get_or_create_collection(name="questions", embedding_function=embeddings)
-            print(chroma_collection)
-
-        except KeyError:
-            chroma_collection = chroma_client.create_collection(name="questions", embedding_function=embeddings)
+        docs_embed = embeddings.embed_documents(docs_text)
 
         if answer.strip():
-            chroma_collection.update(
-                documents=docs_text,
-                ids=doc_ids
-            )
 
-        # vec_db = Chroma.from_documents(documents=docs_chunked, embedding=embeddings, persist_directory=user_embeddings_directory)
-        # vec_db.persist()
+            index.update(
+                id=f"{question_id}",
+                values=docs_embed,
+                namespace=""
+            )
 
         return jsonify(success=True)
     except Exception as e:
@@ -1202,11 +1140,9 @@ def generate_recommendations():
 
     chat = ChatOpenAI(
         model_name="gpt-3.5-turbo",
-        openai_api_key=api_key,
+        openai_api_key=openai_api_key,
         temperature=0,
     )
-
-    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
 
     cur.execute(f"SELECT * FROM saved_jobs WHERE id = %s AND user_id = %s", (job_id, user_id,))
 
@@ -1222,36 +1158,47 @@ def generate_recommendations():
     recommendations_list = [row[2] for row in existing_recommendations]
     recommendations_str = ', '.join(f'"{question}"' for question in recommendations_list)
 
-    embeddings = embedding_functions.OpenAIEmbeddingFunction(
-        api_key=api_key,
-        model_name="text-embedding-ada-002"
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=openai_api_key,
+        model="text-embedding-ada-002"
     )
 
-    chroma_client = chromadb.Client(Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory=user_embeddings_directory
-    ))
+    query_jobs = embeddings.embed_query("What are the important responsibilities, qualifications, skills, and requirements for this job?")
 
-    chroma_collection_jobs = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
-
-    chroma_collection_resume = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
-
-    jobs_docs = chroma_collection_jobs.query(
-        query_texts=["What are the important responsibilities, qualifications, skills, and requirements for this job?"],
-        n_results=4
+    jobs_docs = index.query(
+        vector=query_jobs,
+        filter={
+            "type": {"$eq": "jobs"},
+            "job_id": str(job_id),
+            "user": f"""{user_id}"""
+        },
+        top_k=4,
+        include_metadata=True
     )
 
-    resume_docs = chroma_collection_resume.query(
-        query_texts=["What are the important responsibilities, qualifications, skills, and requirements outlined in this resume?"],
-        n_results=4
+    query_resume = embeddings.embed_query("What are the important responsibilities, qualifications, skills, and requirements outlined in this resume?")
+
+    resume_docs = index.query(
+        vector=query_resume,
+        filter={
+            "type": {"$eq": "resume"},
+            "user": f"""{user_id}"""
+        },
+        top_k=2,
+        include_metadata=True,
+        namespace=""
     )
 
-    jobs_docs_texts = jobs_docs["documents"]
-    jobs_docs_texts_flat = [doc for docs in jobs_docs_texts for doc in docs]
+    jobs_docs_texts = jobs_docs["matches"]
+
+    jobs_docs_texts_flat = [doc["metadata"]["text"] for doc in jobs_docs_texts]
+
     jobs_docs_str = "\n\n".join(jobs_docs_texts_flat)
 
-    resume_docs_texts = resume_docs["documents"]
-    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
+    resume_docs_texts = resume_docs["matches"]
+
+    resume_docs_texts_flat = [doc["metadata"]["text"] for doc in resume_docs_texts]
+
     resume_docs_str = "\n\n".join(resume_docs_texts_flat)
 
     template_questions_base = f"""Based on the following details about my resume and the job I am applying to, please provide me 5 recommendations on how I can update my resume to increase my chances of landing an interview. The recommendations should cover different areas such as skills, work experience, projects, and format. Each recommendation should be justified in terms of how it matches with the job description or enhances my profile. Please return the recommendations separated by newlines.
@@ -1410,33 +1357,32 @@ def search_jobs():
     if not recent_jobs:
         
         if not user_job_title:
-            user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
 
-            embeddings = embedding_functions.OpenAIEmbeddingFunction(
-                api_key=api_key,
-                model_name="text-embedding-ada-002"
+            embeddings = OpenAIEmbeddings(
+                openai_api_key=openai_api_key,
+                model="text-embedding-ada-002"
             )
 
-            chroma_client = chromadb.Client(Settings(
-                chroma_db_impl="duckdb+parquet",
-                persist_directory=user_embeddings_directory
-            ))
+            query_embed = embeddings.embed_query("Current job title and current location/address")
 
-            chroma_collection = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
-
-            initialize_profile_docs = chroma_collection.query(
-                query_texts=["Current job title or role and current location/address"],
-                n_results=4,
-
+            initialize_profile_docs = index.query(
+                vector=query_embed,
+                filter={
+                    "type": {"$eq": "resume"},
+                    "user": f"""{user_id}"""
+                },
+                top_k=2,
+                include_metadata=True,
+                namespace=""
             )
 
-            init_docs = initialize_profile_docs["documents"]
-            init_docs_texts_flat = [doc for docs in init_docs for doc in docs]
+            init_docs = initialize_profile_docs["matches"]
+            init_docs_texts_flat = [doc["metadata"]["text"] for doc in init_docs]
             init_docs_str = "\n\n".join(init_docs_texts_flat)
 
             chat = ChatOpenAI(
                 model_name="gpt-3.5-turbo",
-                openai_api_key=api_key,
+                openai_api_key=openai_api_key,
                 temperature=0,
             )
 
@@ -1501,9 +1447,6 @@ def create_job():
     id = data.get("id")
     date_created = datetime.utcnow()
 
-    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
-    os.makedirs(user_embeddings_directory, exist_ok=True)
-
     print(user_id, id, saved)
 
     cur.execute(
@@ -1546,9 +1489,9 @@ def create_job():
         db.commit()
         cur.close()
 
-        embeddings = embedding_functions.OpenAIEmbeddingFunction(
-            api_key=api_key,
-            model_name="text-embedding-ada-002"
+        embeddings = OpenAIEmbeddings(
+            openai_api_key=openai_api_key,
+            model="text-embedding-ada-002"
         )
 
         text_splitter = RecursiveCharacterTextSplitter(
@@ -1560,28 +1503,12 @@ def create_job():
 
         docs_chunked = text_splitter.create_documents([job_string])
         docs_text = [doc.page_content for doc in docs_chunked]
-        print(docs_text)
+        docs_embed = embeddings.embed_documents(docs_text)
 
         doc_ids = [str(uuid.uuid4()) for _ in docs_chunked]
-        metadatas = [{"job_id": job_id, "company_name": company_name, "job_title": job_title} for _ in docs_chunked]
-   
-        chroma_client = chromadb.Client(Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory=user_embeddings_directory
-        ))
+        metadatas = [{"type": "jobs", "user": str(user_id), "text": _.page_content, "job_id": str(job_id), "company_name": company_name, "job_title": job_title} for _ in docs_chunked]
 
-
-        try:
-            chroma_collection = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
-
-        except:
-            chroma_collection = chroma_client.create_collection(name="jobs", embedding_function=embeddings)
-
-        chroma_collection.add(
-            documents=docs_text,
-            metadatas=metadatas,
-            ids=doc_ids
-        )
+        index.upsert(vectors=zip(doc_ids, docs_embed, metadatas))
 
         return jsonify(
             success=True,
@@ -1627,9 +1554,6 @@ def delete_joblication(job_id):
     # Retrieve the user_id from the request body
     user_id = request.json.get('user_id')
 
-    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
-    os.makedirs(user_embeddings_directory, exist_ok=True)
-
     db = get_db()
 
     cur = db.cursor()
@@ -1640,20 +1564,12 @@ def delete_joblication(job_id):
     db.commit()
     cur.close()
 
-    embeddings = embedding_functions.OpenAIEmbeddingFunction(
-        api_key=api_key,
-        model_name="text-embedding-ada-002"
-    )
-        
-    chroma_client = chromadb.Client(Settings(  
-        chroma_db_impl="duckdb+parquet",
-        persist_directory=user_embeddings_directory
-    ))
-
-    chroma_collection = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
-
-    chroma_collection.delete(
-        where={"job_id": job_id}
+    index.delete(
+        filter={
+            "type": {"$eq": "jobs"},
+            "job_id": job_id,
+            "user": user_id
+        }
     )
 
     return jsonify(success=True)
@@ -1725,11 +1641,9 @@ def generate_cover_letter():
 
     chat = ChatOpenAI(
         model_name="gpt-3.5-turbo",
-        openai_api_key=api_key,
+        openai_api_key=openai_api_key,
         temperature=0,
     )
-
-    user_embeddings_directory = os.path.join(persist_directory, f"user_{user_id}_embeddings")
 
     cur = db.cursor()
 
@@ -1743,38 +1657,6 @@ def generate_cover_letter():
 
     print(job[4])
     print(resume[3])
-
-    embeddings = embedding_functions.OpenAIEmbeddingFunction(
-        api_key=api_key,
-        model_name="text-embedding-ada-002"
-    )
-
-    chroma_client = chromadb.Client(Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory=user_embeddings_directory
-    ))
-
-    chroma_collection_jobs = chroma_client.get_or_create_collection(name="jobs", embedding_function=embeddings)
-
-    chroma_collection_resume = chroma_client.get_or_create_collection(name="resume", embedding_function=embeddings)
-
-    jobs_docs = chroma_collection_jobs.query(
-        query_texts=["What are the important responsibilities, qualifications, skills, and requirements for this job?"],
-        n_results=4
-    )
-
-    resume_docs = chroma_collection_resume.query(
-        query_texts=["What are the important responsibilities, qualifications, skills, and requirements outlined in this resume?"],
-        n_results=4
-    )
-
-    jobs_docs_texts = jobs_docs["documents"]
-    jobs_docs_texts_flat = [doc for docs in jobs_docs_texts for doc in docs]
-    jobs_docs_str = "\n\n".join(jobs_docs_texts_flat)
-
-    resume_docs_texts = resume_docs["documents"]
-    resume_docs_texts_flat = [doc for docs in resume_docs_texts for doc in docs]
-    resume_docs_str = "\n\n".join(resume_docs_texts_flat)
 
     template_questions_base = f"""Below is a user's resume and the description of a job they are applying to. Please write a cover letter for their job application. Do not make anything up.\n
         

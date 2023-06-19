@@ -60,7 +60,7 @@ def setup_db():
             question TEXT,
             answer TEXT,
             recommendation TEXT,
-            FOREIGN KEY (user_id) REFERENCES users (id)
+            FOREIGN KEY (job_id) REFERENCES saved_jobs (id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS jobs (
@@ -97,7 +97,7 @@ def setup_db():
             version_name TEXT,
             version_text TEXT,
             FOREIGN KEY (user_id) REFERENCES users (id),
-            FOREIGN KEY (job_id) REFERENCES saved_jobs (id)
+            FOREIGN KEY (job_id) REFERENCES saved_jobs (id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS cover_letter (
@@ -106,7 +106,7 @@ def setup_db():
             job_id INTEGER,
             cover_letter TEXT,
             FOREIGN KEY (user_id) REFERENCES users (id),
-            FOREIGN KEY (job_id) REFERENCES saved_jobs (id)
+            FOREIGN KEY (job_id) REFERENCES saved_jobs (id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS resume_recommendations (
@@ -117,7 +117,7 @@ def setup_db():
             recommendation TEXT,
             user_notes TEXT,
             FOREIGN KEY (user_id) REFERENCES users (id),
-            FOREIGN KEY (job_id) REFERENCES saved_jobs (id),
+            FOREIGN KEY (job_id) REFERENCES saved_jobs (id) ON DELETE CASCADE,
             FOREIGN KEY (version_id) REFERENCES resume_versions (id)
         );
 
@@ -135,6 +135,7 @@ def setup_db():
             expires_at TIMESTAMP WITH TIME ZONE, 
             FOREIGN KEY (user_id) REFERENCES users (id)
         );
+
         """
     )
     

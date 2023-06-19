@@ -1163,10 +1163,10 @@ def generate_recommendations():
         model="text-embedding-ada-002"
     )
 
-    query_job = embeddings.embed_query("What are the important responsibilities, qualifications, skills, and requirements for this job?")
+    query_jobs = embeddings.embed_query("What are the important responsibilities, qualifications, skills, and requirements for this job?")
 
     jobs_docs = index.query(
-        vector=query_job,
+        vector=query_jobs,
         filter={
             "type": {"$eq": "jobs"},
             "job_id": str(job_id),

@@ -447,6 +447,7 @@ def upload_resume():
             chunk_overlap  = 20,
             length_function = len,
         )
+        
         docs_chunked = text_splitter.create_documents([plain_text])
         docs_text = [doc.page_content for doc in docs_chunked]
         docs_embed = embeddings.embed_documents(docs_text)
